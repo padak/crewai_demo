@@ -1,0 +1,8 @@
+crewai>=0.11.0
+crewai-tools
+python-dotenv>=0.21.1
+duckduckgo-search>=3.9.3  # For research capabilities
+langchain-community>=0.0.10
+langchain-openai>=0.0.3
+openai>=1.6.1
+litellm>=1.15.0 
