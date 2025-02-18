@@ -14,6 +14,7 @@ This project demonstrates the use of CrewAI framework to create an automated con
 │   └── content_tasks.py    # Task definitions
 ├── content_creation_crew.py # Main script
 ├── requirements.txt        # Project dependencies
+├── .env.sample            # Template for environment variables
 └── .env                    # Environment variables (not tracked in git)
 ```
 
@@ -36,11 +37,18 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Create a `.env` file with your OpenRouter API key:
+4. Create a `.env` file from the template:
+```bash
+cp .env.sample .env
+```
+
+5. Edit the `.env` file with your OpenRouter API key:
 ```
 OPENROUTER_API_KEY=your_api_key_here
 OPENAI_API_BASE=https://openrouter.ai/api/v1
 ```
+
+You can get your OpenRouter API key from [https://openrouter.ai/](https://openrouter.ai/).
 
 ## Usage
 
@@ -57,4 +65,14 @@ The project uses three AI agents working together:
 2. **Writer Agent**: Creates engaging content based on the research
 3. **Editor Agent**: Reviews and optimizes the content
 
-Each agent has specific tasks and works sequentially to produce the final content. 
+Each agent has specific tasks and works sequentially to produce the final content.
+
+## Model Configuration
+
+By default, the project uses `gpt-4-turbo` through OpenRouter. You can change the model in `content_creation_crew.py`. Available models include:
+- openai/gpt-4-turbo
+- openai/gpt-3.5-turbo
+- anthropic/claude-2
+- google/palm-2
+
+See more models at [OpenRouter's documentation](https://openrouter.ai/docs#models). 
