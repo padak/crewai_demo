@@ -1,27 +1,35 @@
 from crewai import Task
 from textwrap import dedent
+from typing import Callable, Optional
 
-def create_research_task(agent):
-    return Task(
-        description=dedent("""
-            Research the topic 'The Future of Artificial Intelligence in Healthcare'
+def create_research_task(agent, topic: str, on_start: Optional[Callable] = None, on_complete: Optional[Callable] = None):
+    task = Task(
+        description=dedent(f"""
+            Research the topic '{topic}'
             Focus on:
-            1. Current AI applications in healthcare
+            1. Current applications and state of the art
             2. Emerging trends and technologies
-            3. Potential impact on patient care
-            4. Challenges and ethical considerations
+            3. Potential impact and implications
+            4. Challenges and considerations
             
             Provide a comprehensive research summary with key points and statistics.
         """),
-        expected_output="A detailed research summary about AI in Healthcare with current applications, trends, impacts, and challenges.",
-        agent=agent
+        expected_output=f"[Research Summary] Comprehensive analysis of {topic}, including current state, trends, impacts, and challenges.",
+        agent=agent,
+        tools=[],  # No special tools needed for research
+        async_execution=False,  # Run synchronously to maintain order
+        callback_manager={
+            'on_start': on_start if on_start else lambda: None,
+            'on_end': on_complete if on_complete else lambda x: None
+        }
     )
+    return task
 
-def create_writing_task(agent):
-    return Task(
+def create_writing_task(agent, on_start: Optional[Callable] = None, on_complete: Optional[Callable] = None):
+    task = Task(
         description=dedent("""
-            Using the research provided, create a compelling blog post about
-            'The Future of AI in Healthcare'. The post should:
+            Using the research provided, create a compelling blog post.
+            The post should:
             1. Have an engaging introduction
             2. Cover all key points from the research
             3. Include relevant examples and statistics
@@ -29,12 +37,19 @@ def create_writing_task(agent):
             
             Focus on making complex information accessible to a general audience.
         """),
-        expected_output="A well-structured, engaging 1000-word blog post about AI in Healthcare.",
-        agent=agent
+        expected_output="[Blog Post Draft] A well-structured, engaging blog post based on the research findings.",
+        agent=agent,
+        tools=[],  # No special tools needed for writing
+        async_execution=False,  # Run synchronously to maintain order
+        callback_manager={
+            'on_start': on_start if on_start else lambda: None,
+            'on_end': on_complete if on_complete else lambda x: None
+        }
     )
+    return task
 
-def create_editing_task(agent):
-    return Task(
+def create_editing_task(agent, on_start: Optional[Callable] = None, on_complete: Optional[Callable] = None):
+    task = Task(
         description=dedent("""
             Review and optimize the blog post. Focus on:
             1. Grammar and clarity
@@ -45,6 +60,13 @@ def create_editing_task(agent):
             Provide the final, polished version of the blog post with any necessary
             improvements.
         """),
-        expected_output="A polished, SEO-optimized final version of the blog post with improved clarity and engagement.",
-        agent=agent
-    ) 
+        expected_output="[Final Post] A polished, SEO-optimized blog post with improved clarity and engagement.",
+        agent=agent,
+        tools=[],  # No special tools needed for editing
+        async_execution=False,  # Run synchronously to maintain order
+        callback_manager={
+            'on_start': on_start if on_start else lambda: None,
+            'on_end': on_complete if on_complete else lambda x: None
+        }
+    )
+    return task 

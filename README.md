@@ -1,75 +1,23 @@
 # CrewAI Content Creation Demo
 
-This project demonstrates the use of CrewAI framework to create an automated content creation pipeline using multiple AI agents working together.
+This project demonstrates the use of CrewAI framework to create an automated content creation pipeline using multiple AI agents working together, with real-time monitoring capabilities.
 
-## CrewAI SDK Components
-
-### 1. Agent Creation
-```python
-from crewai import Agent
-
-agent = Agent(
-    role='Research Analyst',      # Define agent's role
-    goal='Specific objective',    # What the agent aims to achieve
-    backstory='Agent context',    # Background that influences behavior
-    llm=llm                      # Language model to use
-)
-```
-
-### 2. Task Definition
-```python
-from crewai import Task
-
-task = Task(
-    description='Task details',   # What needs to be done
-    expected_output='Format',     # Expected result format
-    agent=agent                   # Agent assigned to task
-)
-```
-
-### 3. Crew Orchestration
-```python
-from crewai import Crew
-
-crew = Crew(
-    agents=[agent1, agent2],      # List of agents
-    tasks=[task1, task2],         # Sequential tasks
-    verbose=True                  # Enable detailed output
-)
-
-result = crew.kickoff()           # Start the workflow
-```
-
-### Key Features
-
-1. **Agent Configuration**
-   - Role-based behavior
-   - Goal-oriented actions
-   - Contextual backstory
-   - Customizable LLM integration
-
-2. **Task Management**
-   - Clear task descriptions
-   - Expected output definitions
-   - Agent-task assignment
-   - Sequential execution
-
-3. **Crew Coordination**
-   - Multi-agent orchestration
-   - Task sequencing
-   - Information passing
-   - Process monitoring
-
-4. **LLM Integration**
-   - Supports multiple providers
-   - Model configuration
-   - API management
-   - Response handling
-
-## Agent Workflow
+## Architecture Overview
 
 ```mermaid
-graph TD
+graph TB
+    subgraph Frontend[Frontend Monitor - React]
+        UI[User Interface]
+        WS[WebSocket Client]
+        State[State Management]
+    end
+
+    subgraph Backend[Backend Server - FastAPI]
+        API[REST API]
+        WSS[WebSocket Server]
+        Monitor[Monitoring System]
+    end
+
     subgraph CrewAI[CrewAI Orchestration]
         direction TB
         T1[Research Task] --> A1[Research Agent]
@@ -89,39 +37,70 @@ graph TD
         style Output fill:#ffe5e5,stroke:#333
     end
 
-    Input[Topic: AI in Healthcare] --> T1
+    Input[Topic Input] --> API
+    API --> CrewAI
+    CrewAI -- Status Updates --> Monitor
+    Monitor -- Real-time Updates --> WSS
+    WSS -- WebSocket Messages --> WS
+    WS --> State
+    State --> UI
     
     classDef task fill:#e1f7d5,stroke:#333,stroke-width:1px;
     classDef agent fill:#d4f1f4,stroke:#333,stroke-width:1px;
     classDef io fill:#ffe5e5,stroke:#333,stroke-width:1px;
+    classDef monitor fill:#f8d7da,stroke:#333,stroke-width:1px;
     
     class T1,T2,T3 task;
     class A1,A2,A3 agent;
     class Input,Output io;
-```
+    class Monitor,WSS,WS monitor;
 
-## Key Benefits
+## System Components
 
-1. **Sequential Workflow**: Each agent builds upon the work of the previous agent
-2. **Specialized Roles**: Each agent is optimized for its specific task
-3. **Coordinated Effort**: CrewAI manages the flow of information between agents
-4. **Quality Control**: Each step adds value to the final output
-5. **Scalable Process**: Easy to add or modify agents and tasks
+### 1. Frontend Monitor
+- Real-time agent status visualization
+- WebSocket-based live updates
+- Task progress tracking
+- Professional UI with React
+- Grouped message display
+- Agent workflow visualization
+
+### 2. Backend Server
+- FastAPI-based REST API
+- WebSocket server for real-time communication
+- Task monitoring and status updates
+- Error handling and reconnection logic
+
+### 3. CrewAI Integration
+- Agent orchestration
+- Task execution
+- Progress monitoring
+- Status reporting
 
 ## Project Structure
 
 ```
 .
+├── frontend/                # React-based monitoring interface
+│   ├── src/
+│   │   ├── App.js          # Main application component
+│   │   └── App.css         # Styling
+│   └── package.json        # Frontend dependencies
+├── backend/
+│   ├── app/
+│   │   └── main.py         # FastAPI server implementation
+│   └── requirements.txt    # Backend dependencies
 ├── agents/
 │   ├── research_agent.py   # Research analyst agent
 │   ├── writer_agent.py     # Content writer agent
 │   └── editor_agent.py     # Content editor agent
 ├── tasks/
 │   └── content_tasks.py    # Task definitions
-├── content_creation_crew.py # Main script
+├── content_creation_crew.py # Main CrewAI script
 ├── requirements.txt        # Project dependencies
+├── run_monitor.sh         # Startup script
 ├── .env.sample            # Template for environment variables
-└── .env                    # Environment variables (not tracked in git)
+└── .env                   # Environment variables (not tracked)
 ```
 
 ## Setup
@@ -141,6 +120,8 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 3. Install dependencies:
 ```bash
 pip install -r requirements.txt
+cd backend && pip install -r requirements.txt
+cd ../frontend && npm install
 ```
 
 4. Create a `.env` file from the template:
@@ -156,37 +137,79 @@ OPENAI_API_BASE=https://openrouter.ai/api/v1
 
 You can get your OpenRouter API key from [https://openrouter.ai/](https://openrouter.ai/).
 
-## Usage
+## Running the Application
 
-Run the content creation pipeline:
+Start both the backend server and frontend monitor:
+
 ```bash
-python content_creation_crew.py
+./run_monitor.sh
 ```
+
+Or start them separately:
+
+1. Backend:
+```bash
+cd backend
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+2. Frontend (in a new terminal):
+```bash
+cd frontend
+npm start
+```
+
+## Monitoring Features
+
+1. **Real-time Agent Status**
+   - Visual status indicators
+   - Task progress tracking
+   - Live updates via WebSocket
+
+2. **Message Grouping**
+   - Organized by agent
+   - Chronological ordering
+   - Duplicate filtering
+   - System vs. Agent message differentiation
+
+3. **Professional UI**
+   - Clean, modern design
+   - Responsive layout
+   - Color-coded status indicators
+   - Easy-to-read typography
+
+4. **Error Handling**
+   - Automatic reconnection
+   - Error state visualization
+   - User-friendly error messages
 
 ## How it Works
 
-The project uses three AI agents working together:
+The system operates in three main layers:
 
-1. **Research Agent**: Gathers and analyzes information on the given topic
-   - Focuses on credible sources
-   - Identifies key trends and insights
-   - Provides comprehensive research summary
+1. **CrewAI Layer**
+   - Manages agent interactions
+   - Executes tasks
+   - Generates content
+   - Reports progress
 
-2. **Writer Agent**: Creates engaging content based on the research
-   - Transforms technical information into reader-friendly content
-   - Maintains accuracy while ensuring engagement
-   - Structures content for maximum impact
+2. **Monitoring Layer**
+   - Tracks agent status
+   - Collects task progress
+   - Manages WebSocket connections
+   - Handles error states
 
-3. **Editor Agent**: Reviews and optimizes the content
-   - Ensures grammar and clarity
-   - Optimizes for SEO
-   - Enhances readability and engagement
+3. **Presentation Layer**
+   - Displays real-time updates
+   - Shows agent status
+   - Presents task progress
+   - Manages user interactions
 
-Each agent has specific tasks and works sequentially to produce the final content.
+Each agent's progress is tracked and displayed in real-time, allowing you to monitor the content creation process from start to finish.
 
 ## Model Configuration
 
-By default, the project uses `gpt-4-turbo` through OpenRouter. You can change the model in `content_creation_crew.py`. Available models include:
+By default, the project uses `gpt-4-turbo` through OpenRouter. Available models include:
 - openai/gpt-4-turbo
 - openai/gpt-3.5-turbo
 - anthropic/claude-2
@@ -194,94 +217,6 @@ By default, the project uses `gpt-4-turbo` through OpenRouter. You can change th
 
 See more models at [OpenRouter's documentation](https://openrouter.ai/docs#models).
 
-## Monitoring and Debugging
+## Contributing
 
-### 1. Verbose Mode
-```python
-crew = Crew(
-    agents=[agent1, agent2],
-    tasks=[task1, task2],
-    verbose=True    # Enable detailed logging
-)
-```
-When verbose is enabled, you'll see:
-- Task assignments
-- Agent thought processes
-- Execution steps
-- Output generation
-
-### 2. Process Monitoring
-The execution process shows:
-```
-# Agent: Research Analyst
-## Task: [Task description]
-## Thought Process:
-1. First, I need to...
-2. Then, I will...
-3. Finally, I'll...
-
-## Working on it...
-[Progress updates]
-
-## Final Answer:
-[Task output]
-```
-
-### 3. Debug Options
-
-#### a. Agent Execution Tracking
-```python
-agent = Agent(
-    role='Research Analyst',
-    goal='Research goal',
-    backstory='Agent context',
-    llm=llm,
-    allow_delegation=True,     # Enable task delegation
-    verbose=True              # Agent-specific verbose mode
-)
-```
-
-#### b. Task Progress Monitoring
-```python
-task = Task(
-    description='Task details',
-    expected_output='Expected format',
-    agent=agent,
-    output_handler=lambda output: print(f"Task output: {output}")  # Custom output handling
-)
-```
-
-### 4. Common Monitoring Patterns
-
-1. **Step-by-Step Execution**
-   - Agent identification
-   - Task assignment
-   - Thought process
-   - Work execution
-   - Output generation
-
-2. **Information Flow**
-   - Input processing
-   - Task delegation
-   - Inter-agent communication
-   - Result passing
-
-3. **Error Handling**
-   - Task failures
-   - Agent limitations
-   - Model errors
-   - Recovery attempts
-
-### 5. Monitoring Best Practices
-
-1. **Development Phase**
-   - Enable verbose mode
-   - Monitor agent interactions
-   - Track task completion
-   - Debug error cases
-
-2. **Production Phase**
-   - Use custom output handlers
-   - Implement error logging
-   - Monitor performance
-   - Track success rates 
+Feel free to submit issues, fork the repository, and create pull requests for any improvements. 
