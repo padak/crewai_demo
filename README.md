@@ -192,4 +192,96 @@ By default, the project uses `gpt-4-turbo` through OpenRouter. You can change th
 - anthropic/claude-2
 - google/palm-2
 
-See more models at [OpenRouter's documentation](https://openrouter.ai/docs#models). 
+See more models at [OpenRouter's documentation](https://openrouter.ai/docs#models).
+
+## Monitoring and Debugging
+
+### 1. Verbose Mode
+```python
+crew = Crew(
+    agents=[agent1, agent2],
+    tasks=[task1, task2],
+    verbose=True    # Enable detailed logging
+)
+```
+When verbose is enabled, you'll see:
+- Task assignments
+- Agent thought processes
+- Execution steps
+- Output generation
+
+### 2. Process Monitoring
+The execution process shows:
+```
+# Agent: Research Analyst
+## Task: [Task description]
+## Thought Process:
+1. First, I need to...
+2. Then, I will...
+3. Finally, I'll...
+
+## Working on it...
+[Progress updates]
+
+## Final Answer:
+[Task output]
+```
+
+### 3. Debug Options
+
+#### a. Agent Execution Tracking
+```python
+agent = Agent(
+    role='Research Analyst',
+    goal='Research goal',
+    backstory='Agent context',
+    llm=llm,
+    allow_delegation=True,     # Enable task delegation
+    verbose=True              # Agent-specific verbose mode
+)
+```
+
+#### b. Task Progress Monitoring
+```python
+task = Task(
+    description='Task details',
+    expected_output='Expected format',
+    agent=agent,
+    output_handler=lambda output: print(f"Task output: {output}")  # Custom output handling
+)
+```
+
+### 4. Common Monitoring Patterns
+
+1. **Step-by-Step Execution**
+   - Agent identification
+   - Task assignment
+   - Thought process
+   - Work execution
+   - Output generation
+
+2. **Information Flow**
+   - Input processing
+   - Task delegation
+   - Inter-agent communication
+   - Result passing
+
+3. **Error Handling**
+   - Task failures
+   - Agent limitations
+   - Model errors
+   - Recovery attempts
+
+### 5. Monitoring Best Practices
+
+1. **Development Phase**
+   - Enable verbose mode
+   - Monitor agent interactions
+   - Track task completion
+   - Debug error cases
+
+2. **Production Phase**
+   - Use custom output handlers
+   - Implement error logging
+   - Monitor performance
+   - Track success rates 
