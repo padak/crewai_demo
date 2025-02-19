@@ -54,6 +54,7 @@ graph TB
     class A1,A2,A3 agent;
     class Input,Output io;
     class Monitor,WSS,WS monitor;
+```
 
 ## System Components
 
