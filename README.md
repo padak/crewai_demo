@@ -2,6 +2,70 @@
 
 This project demonstrates the use of CrewAI framework to create an automated content creation pipeline using multiple AI agents working together.
 
+## CrewAI SDK Components
+
+### 1. Agent Creation
+```python
+from crewai import Agent
+
+agent = Agent(
+    role='Research Analyst',      # Define agent's role
+    goal='Specific objective',    # What the agent aims to achieve
+    backstory='Agent context',    # Background that influences behavior
+    llm=llm                      # Language model to use
+)
+```
+
+### 2. Task Definition
+```python
+from crewai import Task
+
+task = Task(
+    description='Task details',   # What needs to be done
+    expected_output='Format',     # Expected result format
+    agent=agent                   # Agent assigned to task
+)
+```
+
+### 3. Crew Orchestration
+```python
+from crewai import Crew
+
+crew = Crew(
+    agents=[agent1, agent2],      # List of agents
+    tasks=[task1, task2],         # Sequential tasks
+    verbose=True                  # Enable detailed output
+)
+
+result = crew.kickoff()           # Start the workflow
+```
+
+### Key Features
+
+1. **Agent Configuration**
+   - Role-based behavior
+   - Goal-oriented actions
+   - Contextual backstory
+   - Customizable LLM integration
+
+2. **Task Management**
+   - Clear task descriptions
+   - Expected output definitions
+   - Agent-task assignment
+   - Sequential execution
+
+3. **Crew Coordination**
+   - Multi-agent orchestration
+   - Task sequencing
+   - Information passing
+   - Process monitoring
+
+4. **LLM Integration**
+   - Supports multiple providers
+   - Model configuration
+   - API management
+   - Response handling
+
 ## Agent Workflow
 
 ```mermaid
