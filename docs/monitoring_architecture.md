@@ -15,39 +15,40 @@ The CrewAI monitoring system provides real-time visibility into the execution of
 ### 2. Initialization Flow
 
 ```mermaid
-graph TD
-    CC[content_creation_crew.py]
-    CM[crewai_monitor.py]
-    TC[Task Class]
-    RA[Research Agent]
-    WA[Writer Agent]
-    EA[Editor Agent]
-    WS[WebSocket Server]
-    UI[Frontend UI]
+flowchart TB
 
-    CC -->|Import| CM
-    CC -->|Initialize| CM
-    CM -->|Import| TC
-    CM -->|Patch| TC
-    
-    TC -->|Monitor| RA
-    TC -->|Monitor| WA
-    TC -->|Monitor| EA
-    
-    RA -->|Status| WS
-    WA -->|Status| WS
-    EA -->|Status| WS
-    
-    WS -->|Updates| UI
+subgraph SystemInitialization["System Initialization"]
+    SI1["Import crewai_monitor"]
+    SI2["Initialize monitoring"]
+    SI3["Patch Task class"]
+end
 
-    style CC fill:#f9f,stroke:#333
-    style CM fill:#bbf,stroke:#333
-    style TC fill:#bfb,stroke:#333
-    style RA fill:#ddf,stroke:#333
-    style WA fill:#ddf,stroke:#333
-    style EA fill:#ddf,stroke:#333
-    style WS fill:#fbb,stroke:#333
-    style UI fill:#fbf,stroke:#333
+subgraph AgentExecution["Agent Execution"]
+    AE1["Research Agent"]
+    AE2["Writer Agent"]
+    AE3["Editor Agent"]
+end
+
+subgraph MonitoringSystem["Monitoring System"]
+    MS1["WebSocket Server"]
+    MS2["Process status updates"]
+    MS3["Update UI state"]
+end
+
+SI3 --> AE1
+SI3 --> AE2
+SI3 --> AE3
+
+AE1 --> MS1
+AE2 --> MS1
+AE3 --> MS1
+
+MS1 --> MS2
+MS2 --> MS3
+
+style SystemInitialization fill:#f9f,stroke:#333
+style AgentExecution fill:#bbf,stroke:#333
+style MonitoringSystem fill:#bfb,stroke:#333
 ```
 
 ## Monitoring Injection Process
