@@ -15,36 +15,50 @@ The CrewAI monitoring system provides real-time visibility into the execution of
 ### 2. Initialization Flow
 
 ```mermaid
-graph TB
-    subgraph Initialization [System Initialization]
-        CC[content_creation_crew.py]
-        CM[crewai_monitor.py]
-        TC[Task Class]
-        CC -->|1. Import| CM
-        CC -->|2. Initialize| CM
-        CM -->|3. Import| TC
-        CM -->|4. Patch Methods| TC
+flowchart TB
+    %% Main components
+    CC(content_creation_crew.py)
+    CM(crewai_monitor.py)
+    TC(Task Class)
+    RA(Research Agent)
+    WA(Writer Agent)
+    EA(Editor Agent)
+    WS(WebSocket Server)
+    UI(Frontend UI)
+
+    %% System Initialization
+    subgraph init[System Initialization]
+        CC --> |1. Import| CM
+        CC --> |2. Initialize| CM
+        CM --> |3. Import| TC
+        CM --> |4. Patch Methods| TC
     end
 
-    subgraph Components [System Components]
-        RA[Research Agent]
-        WA[Writer Agent]
-        EA[Editor Agent]
-        WS[WebSocket Server]
-        UI[Frontend UI]
+    %% System Components
+    subgraph comp[System Components]
+        TC --> |Monitor| RA
+        TC --> |Monitor| WA
+        TC --> |Monitor| EA
+        RA --> |Status| WS
+        WA --> |Status| WS
+        EA --> |Status| WS
+        WS --> |Updates| UI
     end
 
-    TC -->|5. Monitor| RA
-    TC -->|5. Monitor| WA
-    TC -->|5. Monitor| EA
-    RA & WA & EA -->|6. Status Updates| WS
-    WS -->|7. Real-time Updates| UI
+    %% Styling
+    classDef primary fill:#f9f,stroke:#333,stroke-width:2px
+    classDef secondary fill:#bbf,stroke:#333,stroke-width:2px
+    classDef task fill:#bfb,stroke:#333,stroke-width:2px
+    classDef agent fill:#ddf,stroke:#333,stroke-width:2px
+    classDef server fill:#fbb,stroke:#333,stroke-width:2px
+    classDef ui fill:#fbf,stroke:#333,stroke-width:2px
 
-    style CC fill:#f9f,stroke:#333,stroke-width:2px
-    style CM fill:#bbf,stroke:#333,stroke-width:2px
-    style TC fill:#bfb,stroke:#333,stroke-width:2px
-    style WS fill:#fbb,stroke:#333,stroke-width:2px
-    style UI fill:#fbf,stroke:#333,stroke-width:2px
+    class CC primary
+    class CM secondary
+    class TC task
+    class RA,WA,EA agent
+    class WS server
+    class UI ui
 ```
 
 ## Monitoring Injection Process
