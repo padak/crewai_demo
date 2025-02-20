@@ -21,12 +21,18 @@ subgraph SystemInitialization["System Initialization"]
     SI1["Import crewai_monitor"]
     SI2["Initialize monitoring"]
     SI3["Patch Task class"]
+    
+    SI1 --> |"import"| SI2
+    SI2 --> |"patch methods"| SI3
 end
 
 subgraph AgentExecution["Agent Execution"]
     AE1["Research Agent"]
     AE2["Writer Agent"]
     AE3["Editor Agent"]
+    
+    AE1 --> |"research summary"| AE2
+    AE2 --> |"draft content"| AE3
 end
 
 subgraph MonitoringSystem["Monitoring System"]
@@ -35,16 +41,16 @@ subgraph MonitoringSystem["Monitoring System"]
     MS3["Update UI state"]
 end
 
-SI3 --> AE1
-SI3 --> AE2
-SI3 --> AE3
+SI3 --> |"inject monitoring"| AE1
+SI3 --> |"inject monitoring"| AE2
+SI3 --> |"inject monitoring"| AE3
 
-AE1 --> MS1
-AE2 --> MS1
-AE3 --> MS1
+AE1 --> |"send status"| MS1
+AE2 --> |"send status"| MS1
+AE3 --> |"send status"| MS1
 
-MS1 --> MS2
-MS2 --> MS3
+MS1 --> |"process"| MS2
+MS2 --> |"update"| MS3
 
 style SystemInitialization fill:#f9f,stroke:#333
 style AgentExecution fill:#bbf,stroke:#333
