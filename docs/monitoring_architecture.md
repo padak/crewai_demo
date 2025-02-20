@@ -12,41 +12,39 @@ The CrewAI monitoring system provides real-time visibility into the execution of
 - `agents/`: Directory containing agent definitions
 - `tasks/`: Directory containing task definitions
 
-### 2. Integration Flow
+### 2. Initialization Flow
 
 ```mermaid
 graph TB
-    subgraph Initialization
-        A[content_creation_crew.py] -->|1. Imports| B[crewai_monitor.py]
-        B -->|2. Patches| C[CrewAI Classes]
+    subgraph Initialization [System Initialization]
+        CC[content_creation_crew.py]
+        CM[crewai_monitor.py]
+        TC[Task Class]
+        CC -->|1. Import| CM
+        CC -->|2. Initialize| CM
+        CM -->|3. Import| TC
+        CM -->|4. Patch Methods| TC
     end
 
-    subgraph Method Patching
-        C -->|Wraps| D[Task.execute_async]
-        C -->|Wraps| E[Task.execute_sync]
-        C -->|Wraps| F[Crew.kickoff]
+    subgraph Components [System Components]
+        RA[Research Agent]
+        WA[Writer Agent]
+        EA[Editor Agent]
+        WS[WebSocket Server]
+        UI[Frontend UI]
     end
 
-    subgraph Agent Execution
-        G[Research Agent] -->|Monitored Execution| D
-        H[Writer Agent] -->|Monitored Execution| D
-        I[Editor Agent] -->|Monitored Execution| D
-    end
+    TC -->|5. Monitor| RA
+    TC -->|5. Monitor| WA
+    TC -->|5. Monitor| EA
+    RA & WA & EA -->|6. Status Updates| WS
+    WS -->|7. Real-time Updates| UI
 
-    subgraph Status Updates
-        D -->|Status Events| J[WebSocket Server]
-        E -->|Status Events| J
-        F -->|Status Events| J
-    end
-
-    subgraph UI Updates
-        J -->|Real-time Updates| K[Frontend UI]
-    end
-
-    style A fill:#f9f,stroke:#333
-    style B fill:#bbf,stroke:#333
-    style J fill:#bfb,stroke:#333
-    style K fill:#fbb,stroke:#333
+    style CC fill:#f9f,stroke:#333,stroke-width:2px
+    style CM fill:#bbf,stroke:#333,stroke-width:2px
+    style TC fill:#bfb,stroke:#333,stroke-width:2px
+    style WS fill:#fbb,stroke:#333,stroke-width:2px
+    style UI fill:#fbf,stroke:#333,stroke-width:2px
 ```
 
 ## Monitoring Injection Process
