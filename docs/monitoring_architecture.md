@@ -26,13 +26,12 @@ subgraph SystemInitialization["System Initialization"]
     SI2 --> |"patch methods"| SI3
 end
 
-subgraph AgentExecution["Agent Execution"]
-    AE1["Research Agent"]
-    AE2["Writer Agent"]
-    AE3["Editor Agent"]
+subgraph AgentExecution["Dynamic Agent Execution"]
+    TC["Task Class"]
+    AG["Any Agent"]
     
-    AE1 --> |"research summary"| AE2
-    AE2 --> |"draft content"| AE3
+    TC --> |"execute()"| AG
+    AG --> |"monitored_execute()"| TC
 end
 
 subgraph MonitoringSystem["Monitoring System"]
@@ -41,20 +40,27 @@ subgraph MonitoringSystem["Monitoring System"]
     MS3["Update UI state"]
 end
 
-SI3 --> |"inject monitoring"| AE1
-SI3 --> |"inject monitoring"| AE2
-SI3 --> |"inject monitoring"| AE3
+SI3 --> |"inject monitoring wrapper"| TC
 
-AE1 --> |"send status"| MS1
-AE2 --> |"send status"| MS1
-AE3 --> |"send status"| MS1
-
+AG --> |"send status updates"| MS1
 MS1 --> |"process"| MS2
 MS2 --> |"update"| MS3
+
+%% Add notes about dynamic nature
+note1["Monitoring is agent-agnostic"]
+note2["Works with any number of agents"]
+note3["Captures all task executions"]
+
+TC --- note1
+AG --- note2
+MS1 --- note3
 
 style SystemInitialization fill:#f9f,stroke:#333
 style AgentExecution fill:#bbf,stroke:#333
 style MonitoringSystem fill:#bfb,stroke:#333
+style note1 fill:#fff,stroke:#333,stroke-dasharray: 5 5
+style note2 fill:#fff,stroke:#333,stroke-dasharray: 5 5
+style note3 fill:#fff,stroke:#333,stroke-dasharray: 5 5
 ```
 
 ## Monitoring Injection Process
