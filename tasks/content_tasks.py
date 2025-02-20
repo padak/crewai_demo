@@ -1,9 +1,8 @@
-from crewai import Task
 from textwrap import dedent
-from typing import Callable, Optional
+from crewai import Task
 
-def create_research_task(agent, topic: str, on_start: Optional[Callable] = None, on_complete: Optional[Callable] = None):
-    task = Task(
+def create_research_task(agent, topic: str) -> Task:
+    return Task(
         description=dedent(f"""
             Research the topic '{topic}'
             Focus on:
@@ -16,17 +15,11 @@ def create_research_task(agent, topic: str, on_start: Optional[Callable] = None,
         """),
         expected_output=f"[Research Summary] Comprehensive analysis of {topic}, including current state, trends, impacts, and challenges.",
         agent=agent,
-        tools=[],  # No special tools needed for research
-        async_execution=False,  # Run synchronously to maintain order
-        callback_manager={
-            'on_start': on_start if on_start else lambda: None,
-            'on_end': on_complete if on_complete else lambda x: None
-        }
+        async_execution=False  # Run synchronously to maintain order
     )
-    return task
 
-def create_writing_task(agent, on_start: Optional[Callable] = None, on_complete: Optional[Callable] = None):
-    task = Task(
+def create_writing_task(agent) -> Task:
+    return Task(
         description=dedent("""
             Using the research provided, create a compelling blog post.
             The post should:
@@ -39,17 +32,11 @@ def create_writing_task(agent, on_start: Optional[Callable] = None, on_complete:
         """),
         expected_output="[Blog Post Draft] A well-structured, engaging blog post based on the research findings.",
         agent=agent,
-        tools=[],  # No special tools needed for writing
-        async_execution=False,  # Run synchronously to maintain order
-        callback_manager={
-            'on_start': on_start if on_start else lambda: None,
-            'on_end': on_complete if on_complete else lambda x: None
-        }
+        async_execution=False  # Run synchronously to maintain order
     )
-    return task
 
-def create_editing_task(agent, on_start: Optional[Callable] = None, on_complete: Optional[Callable] = None):
-    task = Task(
+def create_editing_task(agent) -> Task:
+    return Task(
         description=dedent("""
             Review and optimize the blog post. Focus on:
             1. Grammar and clarity
@@ -62,11 +49,5 @@ def create_editing_task(agent, on_start: Optional[Callable] = None, on_complete:
         """),
         expected_output="[Final Post] A polished, SEO-optimized blog post with improved clarity and engagement.",
         agent=agent,
-        tools=[],  # No special tools needed for editing
-        async_execution=False,  # Run synchronously to maintain order
-        callback_manager={
-            'on_start': on_start if on_start else lambda: None,
-            'on_end': on_complete if on_complete else lambda x: None
-        }
-    )
-    return task 
+        async_execution=False  # Run synchronously to maintain order
+    ) 

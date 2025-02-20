@@ -1,6 +1,7 @@
 from fastapi import FastAPI, WebSocket, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from starlette.websockets import WebSocketDisconnect
 import json
 from typing import List
 import asyncio
@@ -100,67 +101,122 @@ async def run_crewai_task(topic: str):
             "timestamp": datetime.now().isoformat(),
             "agent": "System",
             "task": "Starting",
-            "output": f"Beginning content creation for topic: {topic}"
+            "output": f"Beginning content creation for topic: {topic}",
+            "type": "status"
         })
 
-        # Update Research Agent status
-        await broadcast_message({
-            "timestamp": datetime.now().isoformat(),
-            "agent": "Research Agent",
-            "task": "Researching",
-            "output": f"Starting research on topic: {topic}"
-        })
-        
-        # Run CrewAI
-        result = await asyncio.to_thread(run_crewai, topic)
-        
-        # Since we can't directly hook into CrewAI's internal state changes,
-        # we'll monitor the output for specific patterns
-        if "Writer Agent" in str(result):
-            await broadcast_message({
+        # Create a queue for status updates
+        status_queue = asyncio.Queue()
+
+        # Callback functions for task status updates
+        def on_research_start():
+            status_queue.put_nowait({
+                "timestamp": datetime.now().isoformat(),
+                "agent": "Research Agent",
+                "task": "Researching",
+                "output": f"Starting research on topic: {topic}",
+                "type": "status"
+            })
+
+        def on_research_complete(result):
+            status_queue.put_nowait({
                 "timestamp": datetime.now().isoformat(),
                 "agent": "Research Agent",
                 "task": "Completed",
-                "output": "Research phase completed"
+                "output": "Research phase completed",
+                "type": "status"
             })
-            await broadcast_message({
+
+        def on_writing_start():
+            status_queue.put_nowait({
                 "timestamp": datetime.now().isoformat(),
                 "agent": "Writer Agent",
                 "task": "Writing",
-                "output": "Creating content based on research findings"
+                "output": "Starting content creation",
+                "type": "status"
             })
 
-        if "Editor Agent" in str(result):
-            await broadcast_message({
+        def on_writing_complete(result):
+            status_queue.put_nowait({
                 "timestamp": datetime.now().isoformat(),
                 "agent": "Writer Agent",
                 "task": "Completed",
-                "output": "Writing phase completed"
+                "output": "Writing phase completed",
+                "type": "status"
             })
-            await broadcast_message({
+
+        def on_editing_start():
+            status_queue.put_nowait({
                 "timestamp": datetime.now().isoformat(),
                 "agent": "Editor Agent",
                 "task": "Editing",
-                "output": "Reviewing and optimizing the content"
+                "output": "Starting content optimization",
+                "type": "status"
             })
-        
-        # Final status update
-        await broadcast_message({
-            "timestamp": datetime.now().isoformat(),
-            "agent": "Editor Agent",
-            "task": "Completed",
-            "output": "Content optimization completed"
-        })
 
-        await broadcast_message({
-            "timestamp": datetime.now().isoformat(),
-            "agent": "System",
-            "task": "Completed",
-            "output": "Content creation process finished successfully",
-            "type": "status",
-            "status": "completed"
-        })
-        
+        def on_editing_complete(result):
+            status_queue.put_nowait({
+                "timestamp": datetime.now().isoformat(),
+                "agent": "Editor Agent",
+                "task": "Completed",
+                "output": "Content optimization completed",
+                "type": "status"
+            })
+
+        # Start status monitoring task
+        async def monitor_status():
+            while True:
+                try:
+                    message = await status_queue.get()
+                    await broadcast_message(message)
+                    status_queue.task_done()
+                except Exception as e:
+                    logger.error(f"Error in status monitoring: {str(e)}")
+                    break
+
+        # Start the monitoring task
+        monitor_task = asyncio.create_task(monitor_status())
+
+        # Run CrewAI with callbacks
+        try:
+            result = await asyncio.to_thread(
+                run_crewai, 
+                topic,
+                on_research_start=on_research_start,
+                on_research_complete=on_research_complete,
+                on_writing_start=on_writing_start,
+                on_writing_complete=on_writing_complete,
+                on_editing_start=on_editing_start,
+                on_editing_complete=on_editing_complete
+            )
+
+            # Final system status
+            await broadcast_message({
+                "timestamp": datetime.now().isoformat(),
+                "agent": "System",
+                "task": "Completed",
+                "output": "Content creation process finished successfully",
+                "type": "status"
+            })
+
+            # Cancel the monitoring task
+            monitor_task.cancel()
+            return result
+
+        except Exception as e:
+            error_msg = f"Error in content creation: {str(e)}"
+            await broadcast_message({
+                "timestamp": datetime.now().isoformat(),
+                "agent": "System",
+                "task": "Error",
+                "output": error_msg,
+                "type": "status",
+                "status": "error"
+            })
+            # Cancel the monitoring task
+            monitor_task.cancel()
+            raise e
+
     except Exception as e:
         error_msg = f"Error in content creation: {str(e)}"
         await broadcast_message({

@@ -64,21 +64,60 @@ function App() {
         // Skip acknowledgment messages
         if (data.type === 'ack') return;
         
-        // Update agent status if it's an agent message
-        if (data.type === 'status' && data.agent in AGENT_CONFIG) {
-          setAgents(prev => ({
-            ...prev,
-            [data.agent]: {
-              ...prev[data.agent],
-              status: data.task
+        // Update agent status based on the message
+        if (data.agent in AGENT_CONFIG) {
+          setAgents(prev => {
+            const newAgents = { ...prev };
+            
+            // Update the current agent's status
+            if (data.task === 'Starting' || data.task === 'Researching' || data.task === 'Writing' || data.task === 'Editing') {
+              newAgents[data.agent] = {
+                ...newAgents[data.agent],
+                status: data.task
+              };
+            } else if (data.task === 'Completed') {
+              newAgents[data.agent] = {
+                ...newAgents[data.agent],
+                status: 'Completed'
+              };
+              
+              // Set next agent to active if it exists
+              const agentOrder = ['Research Agent', 'Writer Agent', 'Editor Agent'];
+              const currentIndex = agentOrder.indexOf(data.agent);
+              if (currentIndex < agentOrder.length - 1) {
+                const nextAgent = agentOrder[currentIndex + 1];
+                newAgents[nextAgent] = {
+                  ...newAgents[nextAgent],
+                  status: 'Starting'
+                };
+              }
             }
-          }));
+            
+            return newAgents;
+          });
           setIsRunning(true);
         }
         
-        // Handle completion
-        if (data.task === 'Completed' && data.agent === 'Editor Agent') {
-          setIsRunning(false);
+        // Handle system messages
+        if (data.agent === 'System') {
+          if (data.task === 'Starting') {
+            // Reset all agents to waiting except Research Agent
+            setAgents(prev => {
+              const newAgents = { ...prev };
+              Object.keys(newAgents).forEach(agent => {
+                newAgents[agent] = {
+                  ...newAgents[agent],
+                  status: agent === 'Research Agent' ? 'Starting' : 'Waiting'
+                };
+              });
+              return newAgents;
+            });
+            setIsRunning(true);
+          } else if (data.task === 'Completed' || data.task === 'Error') {
+            // Reset all agents to waiting
+            setAgents(AGENT_CONFIG);
+            setIsRunning(false);
+          }
         }
         
         // Add message to log
@@ -86,7 +125,7 @@ function App() {
       };
 
       ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        console.log('WebSocket error:', error);
         setConnectionStatus('Error connecting to server');
         setIsRunning(false);
         setTimeout(connectWebSocket, 5000);
@@ -165,7 +204,7 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <h1>CrewAI Agent Monitor</h1>
+        <h1>Keboola Agent Monitoring</h1>
         <div className={`connection-status ${connectionStatus.includes('Connected') ? 'connected' : 'disconnected'}`}>
           {connectionStatus}
         </div>
@@ -200,21 +239,29 @@ function App() {
         <div className="agent-overview">
           <h2>Agent Overview</h2>
           <div className="agent-workflow">
-            {Object.entries(agents).map(([name, agent], index) => (
-              <div key={name} className={`agent-node ${agent.status !== 'idle' ? 'active' : ''}`}>
-                <div className="agent-info">
-                  <h3>{name}</h3>
-                  <p className="agent-role">{agent.role}</p>
-                  <p className="agent-description">{agent.description}</p>
-                  <div className={`agent-status ${agent.status !== 'idle' ? 'active' : ''}`}>
-                    {agent.status === 'idle' ? 'Waiting' : agent.status}
+            {Object.entries(agents).map(([name, agent], index) => {
+              const isActive = agent.status !== 'idle' && agent.status !== 'Waiting';
+              const statusClass = 
+                agent.status === 'Completed' ? 'completed' :
+                agent.status === 'Error' ? 'error' :
+                isActive ? 'active' : '';
+              
+              return (
+                <div key={name} className={`agent-node ${statusClass}`}>
+                  <div className="agent-info">
+                    <h3>{name}</h3>
+                    <p className="agent-role">{agent.role}</p>
+                    <p className="agent-description">{agent.description}</p>
+                    <div className={`agent-status ${statusClass}`}>
+                      {agent.status === 'idle' ? 'Waiting' : agent.status}
+                    </div>
                   </div>
+                  {index < Object.entries(agents).length - 1 && (
+                    <div className={`workflow-arrow ${isActive ? 'active' : ''}`}>→</div>
+                  )}
                 </div>
-                {index < Object.entries(agents).length - 1 && (
-                  <div className="workflow-arrow">→</div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
         <main>
