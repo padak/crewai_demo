@@ -15,50 +15,39 @@ The CrewAI monitoring system provides real-time visibility into the execution of
 ### 2. Initialization Flow
 
 ```mermaid
-flowchart TB
-    %% Main components
-    CC(content_creation_crew.py)
-    CM(crewai_monitor.py)
-    TC(Task Class)
-    RA(Research Agent)
-    WA(Writer Agent)
-    EA(Editor Agent)
-    WS(WebSocket Server)
-    UI(Frontend UI)
+graph TD
+    CC[content_creation_crew.py]
+    CM[crewai_monitor.py]
+    TC[Task Class]
+    RA[Research Agent]
+    WA[Writer Agent]
+    EA[Editor Agent]
+    WS[WebSocket Server]
+    UI[Frontend UI]
 
-    %% System Initialization
-    subgraph init[System Initialization]
-        CC --> |1. Import| CM
-        CC --> |2. Initialize| CM
-        CM --> |3. Import| TC
-        CM --> |4. Patch Methods| TC
-    end
+    CC -->|Import| CM
+    CC -->|Initialize| CM
+    CM -->|Import| TC
+    CM -->|Patch| TC
+    
+    TC -->|Monitor| RA
+    TC -->|Monitor| WA
+    TC -->|Monitor| EA
+    
+    RA -->|Status| WS
+    WA -->|Status| WS
+    EA -->|Status| WS
+    
+    WS -->|Updates| UI
 
-    %% System Components
-    subgraph comp[System Components]
-        TC --> |Monitor| RA
-        TC --> |Monitor| WA
-        TC --> |Monitor| EA
-        RA --> |Status| WS
-        WA --> |Status| WS
-        EA --> |Status| WS
-        WS --> |Updates| UI
-    end
-
-    %% Styling
-    classDef primary fill:#f9f,stroke:#333,stroke-width:2px
-    classDef secondary fill:#bbf,stroke:#333,stroke-width:2px
-    classDef task fill:#bfb,stroke:#333,stroke-width:2px
-    classDef agent fill:#ddf,stroke:#333,stroke-width:2px
-    classDef server fill:#fbb,stroke:#333,stroke-width:2px
-    classDef ui fill:#fbf,stroke:#333,stroke-width:2px
-
-    class CC primary
-    class CM secondary
-    class TC task
-    class RA,WA,EA agent
-    class WS server
-    class UI ui
+    style CC fill:#f9f,stroke:#333
+    style CM fill:#bbf,stroke:#333
+    style TC fill:#bfb,stroke:#333
+    style RA fill:#ddf,stroke:#333
+    style WA fill:#ddf,stroke:#333
+    style EA fill:#ddf,stroke:#333
+    style WS fill:#fbb,stroke:#333
+    style UI fill:#fbf,stroke:#333
 ```
 
 ## Monitoring Injection Process
