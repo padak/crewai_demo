@@ -23,23 +23,39 @@ async def send_status_update(message):
     if not config["initialized"]:
         return
     
+    # Log incoming message before any modification
+    logger.info(f"STATUS DEBUG - Original message: {json.dumps(message, indent=2)}")
+    
+    # Get the status from the explicit status field or task field
+    status = message.get("status", message.get("task"))
+    if status == "Completed":
+        status = "Done"  # Use "Done" for completed tasks in UI
+    
+    # Track status transition
+    logger.info(f"STATUS DEBUG - Status normalized from '{message.get('task')}' to '{status}'")
+    
+    # Get the original task type for active status
+    agent_name = message.get("agent")
+    
     # Add agent state information for UI updates
     enhanced_message = {
         **message,
         "timestamp": datetime.now().isoformat(),
         "type": "status",
+        "task": status,  # Use normalized status
         "agent_state": {
-            "name": message.get("agent"),
-            "status": message.get("task"),
-            "role": message.get("agent")  # Use full agent name as role for UI
+            "name": agent_name,
+            "status": status,  # Use the normalized status directly
+            "role": agent_name  # Use full agent name as role for UI
         }
     }
     
-    logger.info(f"Sending status update: {json.dumps(enhanced_message, indent=2)}")
+    logger.info(f"STATUS DEBUG - Final message to send: {json.dumps(enhanced_message, indent=2)}")
         
     try:
         async with websockets.connect(config["ws_url"]) as websocket:
             await websocket.send(json.dumps(enhanced_message))
+            logger.info(f"STATUS DEBUG - Successfully sent message for agent {agent_name} with status {status}")
     except Exception as e:
         logger.error(f"Failed to send status update: {str(e)}")
 
@@ -63,21 +79,20 @@ def get_task_info(task):
     agent_role = task.agent.role if hasattr(task.agent, 'role') else 'Unknown'
     # Map to UI-expected name
     agent_name = role_to_name.get(agent_role, agent_role)
-    logger.info(f"Mapped agent role '{agent_role}' to UI name '{agent_name}'")
     
     description = str(getattr(task, 'description', ''))
     
-    # Determine task type based on agent name or task description
-    if "research" in agent_name.lower() or "research" in description.lower():
+    # Determine task type based on agent name and description
+    if "research" in agent_name.lower():
         task_type = "Researching"
-    elif "writ" in agent_name.lower() or "writ" in description.lower():
+    elif "writer" in agent_name.lower() or "content writer" in agent_role.lower():
         task_type = "Writing"
-    elif "edit" in agent_name.lower() or "edit" in description.lower():
+    elif "editor" in agent_name.lower() or "edit" in description.lower():
         task_type = "Editing"
     else:
         task_type = "Processing"
     
-    logger.info(f"Resolved agent name: {agent_name}, task type: {task_type}")
+    logger.info(f"TASK DEBUG - Agent '{agent_name}' (role: '{agent_role}') resolved task type: '{task_type}'")
     return agent_name, task_type
 
 def patch_crewai():
@@ -97,32 +112,38 @@ def patch_crewai():
             return await original_execute_async(self, *args, **kwargs)
             
         agent_name, task_type = get_task_info(self)
+        logger.info(f"EXECUTION DEBUG - Starting async execution for {agent_name}")
         
         # Send start status
         sync_send_status({
             "agent": agent_name,
             "task": task_type,
-            "output": f"Starting {task_type.lower()} task"
+            "output": f"Starting {task_type.lower()} task",
+            "status": task_type  # Add explicit status field
         })
         
         try:
             # Execute the task
             result = await original_execute_async(self, *args, **kwargs)
             
+            logger.info(f"EXECUTION DEBUG - Completed async execution for {agent_name}")
             # Send completion status
             sync_send_status({
                 "agent": agent_name,
-                "task": "Completed",
-                "output": f"Completed {task_type.lower()} task"
+                "task": "Done",  # Send Done directly instead of Completed
+                "output": f"Completed {task_type.lower()} task",
+                "status": "Done"  # Add explicit status field
             })
             
             return result
         except Exception as e:
+            logger.error(f"EXECUTION DEBUG - Error in async execution for {agent_name}: {str(e)}")
             # Send error status
             sync_send_status({
                 "agent": agent_name,
                 "task": "Error",
-                "output": f"Error in {task_type.lower()} task: {str(e)}"
+                "output": f"Error in {task_type.lower()} task: {str(e)}",
+                "status": "Error"  # Add explicit status field
             })
             raise
     
@@ -137,7 +158,8 @@ def patch_crewai():
         sync_send_status({
             "agent": agent_name,
             "task": task_type,
-            "output": f"Starting {task_type.lower()} task"
+            "output": f"Starting {task_type.lower()} task",
+            "status": task_type  # Add explicit status field
         })
         
         try:
@@ -147,8 +169,9 @@ def patch_crewai():
             # Send completion status
             sync_send_status({
                 "agent": agent_name,
-                "task": "Completed",
-                "output": f"Completed {task_type.lower()} task"
+                "task": "Done",  # Send Done directly instead of Completed
+                "output": f"Completed {task_type.lower()} task",
+                "status": "Done"  # Add explicit status field
             })
             
             return result
@@ -157,7 +180,8 @@ def patch_crewai():
             sync_send_status({
                 "agent": agent_name,
                 "task": "Error",
-                "output": f"Error in {task_type.lower()} task: {str(e)}"
+                "output": f"Error in {task_type.lower()} task: {str(e)}",
+                "status": "Error"  # Add explicit status field
             })
             raise
     
