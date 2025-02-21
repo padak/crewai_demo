@@ -50,7 +50,7 @@ function App() {
 
   useEffect(() => {
     const connectWebSocket = () => {
-      const ws = new WebSocket('ws://161.35.192.142:8000/ws');
+      const ws = new WebSocket('ws://localhost:8000/ws');
       
       ws.onopen = () => {
         console.log('Connected to WebSocket');
@@ -155,7 +155,7 @@ function App() {
     try {
       setIsRunning(true);
       setMessages([]);
-      const response = await fetch('http://161.35.192.142:8000/start', {
+      const response = await fetch('http://localhost:8000/start', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

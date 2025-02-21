@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 # Global configuration
 config = {
-    "ws_url": "ws://161.35.192.142:8000/ws",
+    "ws_url": "ws://localhost:8000/ws",
     "initialized": False,
     "topic": None,
     "websocket": None

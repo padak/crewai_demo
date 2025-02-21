@@ -45,7 +45,7 @@ def main(topic: str = "The Future of AI in Healthcare"):
         
         # Configure the LLM to use OpenRouter
         llm = ChatOpenAI(
-            model="openai/gpt-4-turbo",
+            model="meta-llama/llama-3.1-8b-instruct",
             openai_api_key=os.environ["OPENROUTER_API_KEY"],
             openai_api_base=os.environ["OPENAI_API_BASE"],
             model_kwargs={
