@@ -12,10 +12,11 @@ logger = logging.getLogger(__name__)
 
 # Global configuration
 config = {
-    "ws_url": "ws://localhost:8000/ws",
+    "ws_url": "ws://localhost:8888/ws",
     "initialized": False,
     "topic": None,
     "websocket": None,
+    "message_queue": asyncio.Queue()
 }
 
 
@@ -57,23 +58,8 @@ async def send_status_update(message):
         f"STATUS DEBUG - Final message to send: {json.dumps(enhanced_message, indent=2)}"
     )
 
-    try:
-        async with websockets.connect(config["ws_url"]) as websocket:
-            await websocket.send(json.dumps(enhanced_message))
-            logger.info(
-                f"STATUS DEBUG - Successfully sent message for agent {agent_name} with status {status}"
-            )
-            # Allow for normal closure
-            await websocket.close(1000)
-    except websockets.exceptions.ConnectionClosed as e:
-        if e.code == 1000:
-            logger.info(
-                f"WebSocket closed normally after sending status update: {str(e)}"
-            )
-        else:
-            logger.error(f"WebSocket connection closed unexpectedly: {str(e)}")
-    except Exception as e:
-        logger.error(f"Failed to send status update: {str(e)}")
+    # Add message to queue for sending
+    await config["message_queue"].put(enhanced_message)
 
 
 def sync_send_status(message):
@@ -81,7 +67,36 @@ def sync_send_status(message):
     try:
         asyncio.run(send_status_update(message))
     except Exception as e:
-        logger.error(f"Failed to send status update: {str(e)}")
+        logger.error(f"Failed to queue status update: {str(e)}")
+
+
+async def websocket_sender():
+    """Background task to send messages via WebSocket."""
+    while True:
+        try:
+            if not config["websocket"]:
+                config["websocket"] = await websockets.connect(config["ws_url"])
+                logger.info("WebSocket connection established")
+
+            # Get message from queue
+            message = await config["message_queue"].get()
+            
+            try:
+                await config["websocket"].send(json.dumps(message))
+                logger.info(f"Successfully sent message for agent {message.get('agent')} with status {message.get('status')}")
+            except websockets.exceptions.ConnectionClosed:
+                logger.warning("WebSocket connection closed, reconnecting...")
+                config["websocket"] = None
+                # Put the message back in the queue
+                await config["message_queue"].put(message)
+            except Exception as e:
+                logger.error(f"Error sending message: {str(e)}")
+                # Put the message back in the queue
+                await config["message_queue"].put(message)
+
+        except Exception as e:
+            logger.error(f"Error in websocket sender: {str(e)}")
+            await asyncio.sleep(1)  # Wait before retrying
 
 
 def get_task_info(task):
@@ -141,7 +156,7 @@ def patch_crewai():
                 "agent": agent_name,
                 "task": task_type,
                 "output": f"Starting {task_type.lower()} task",
-                "status": task_type,  # Add explicit status field
+                "status": task_type,
                 "type": "status",
             }
         )
@@ -154,14 +169,15 @@ def patch_crewai():
 
             # Send the actual content first
             if result:
-                sync_send_status(
-                    {
-                        "agent": agent_name,
-                        "task": task_type,
-                        "output": str(result),
-                        "type": "content",  # Mark this as content
-                    }
-                )
+                content_message = {
+                    "agent": agent_name,
+                    "task": task_type,
+                    "output": str(result),
+                    "type": "content",
+                    "timestamp": datetime.now().isoformat()
+                }
+                sync_send_status(content_message)
+                logger.info(f"CONTENT DEBUG - Sent content for {agent_name}: {str(result)[:100]}...")
 
             # Then send completion status
             sync_send_status(
@@ -215,14 +231,15 @@ def patch_crewai():
 
             # Send the actual content first
             if result:
-                sync_send_status(
-                    {
-                        "agent": agent_name,
-                        "task": task_type,
-                        "output": str(result),
-                        "type": "content",  # Mark this as content
-                    }
-                )
+                content_message = {
+                    "agent": agent_name,
+                    "task": task_type,
+                    "output": str(result),
+                    "type": "content",
+                    "timestamp": datetime.now().isoformat()
+                }
+                sync_send_status(content_message)
+                logger.info(f"CONTENT DEBUG - Sent content for {agent_name}: {str(result)[:100]}...")
 
             # Then send completion status
             sync_send_status(
@@ -260,6 +277,7 @@ def patch_crewai():
                 "agent": "System",
                 "task": "Starting",
                 "output": f"Beginning content creation for topic: {config['topic']}",
+                "type": "status"
             }
         )
 
@@ -273,6 +291,7 @@ def patch_crewai():
                     "agent": "System",
                     "task": "Completed",
                     "output": "Content creation process finished successfully",
+                    "type": "status"
                 }
             )
 
@@ -284,6 +303,7 @@ def patch_crewai():
                     "agent": "System",
                     "task": "Error",
                     "output": f"Error in content creation: {str(e)}",
+                    "type": "status"
                 }
             )
             raise
@@ -304,6 +324,20 @@ def init(ws_url: Optional[str] = None, topic: Optional[str] = None):
     if topic:
         config["topic"] = topic
 
+    # Create and run event loop in a separate thread
+    def run_event_loop():
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(websocket_sender())
+        except Exception as e:
+            logger.error(f"Error in event loop: {str(e)}")
+
+    # Start event loop thread
+    import threading
+    event_loop_thread = threading.Thread(target=run_event_loop, daemon=True)
+    event_loop_thread.start()
+
     # Patch CrewAI classes
     patch_crewai()
 
@@ -316,6 +350,7 @@ def init(ws_url: Optional[str] = None, topic: Optional[str] = None):
             "agent": "System",
             "task": "Connection",
             "output": "Monitoring system initialized",
+            "type": "status"
         }
     )
 

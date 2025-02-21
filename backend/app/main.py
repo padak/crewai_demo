@@ -10,13 +10,26 @@ import sys
 import os
 from pathlib import Path
 import logging
+import uvicorn
 
 # Add the project root to Python path
-sys.path.append(str(Path(__file__).parent.parent.parent))
+project_root = str(Path(__file__).parent.parent.parent)
+sys.path.append(project_root)
 
 from content_creation_crew import main as run_crewai
 
-app = FastAPI()
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(
+    title="CrewAI Content Creation API",
+    description="Backend API for CrewAI content creation system",
+    version="1.0.0"
+)
 
 # Enable CORS
 app.add_middleware(
@@ -29,8 +42,6 @@ app.add_middleware(
 
 # Store active WebSocket connections
 active_connections: List[WebSocket] = []
-
-logger = logging.getLogger(__name__)
 
 async def broadcast_message(message: dict):
     """Broadcast message to all connected clients."""
@@ -123,6 +134,15 @@ async def run_crewai_task(topic: str):
             })
 
         def on_research_complete(result):
+            # Send the research content
+            status_queue.put_nowait({
+                "timestamp": datetime.now().isoformat(),
+                "agent": "Research Agent",
+                "task": "Research Summary",
+                "output": str(result),
+                "type": "content"
+            })
+            # Send completion status
             status_queue.put_nowait({
                 "timestamp": datetime.now().isoformat(),
                 "agent": "Research Agent",
@@ -141,6 +161,15 @@ async def run_crewai_task(topic: str):
             })
 
         def on_writing_complete(result):
+            # Send the draft content
+            status_queue.put_nowait({
+                "timestamp": datetime.now().isoformat(),
+                "agent": "Writer Agent",
+                "task": "Blog Post Draft",
+                "output": str(result),
+                "type": "content"
+            })
+            # Send completion status
             status_queue.put_nowait({
                 "timestamp": datetime.now().isoformat(),
                 "agent": "Writer Agent",
@@ -159,6 +188,15 @@ async def run_crewai_task(topic: str):
             })
 
         def on_editing_complete(result):
+            # Send the final content
+            status_queue.put_nowait({
+                "timestamp": datetime.now().isoformat(),
+                "agent": "Editor Agent",
+                "task": "Final Post",
+                "output": str(result),
+                "type": "content"
+            })
+            # Send completion status
             status_queue.put_nowait({
                 "timestamp": datetime.now().isoformat(),
                 "agent": "Editor Agent",
@@ -234,4 +272,17 @@ async def run_crewai_task(topic: str):
 
 @app.get("/")
 async def root():
-    return {"status": "running"} 
+    return {"status": "running"}
+
+def start_server():
+    """Start the FastAPI server with uvicorn."""
+    uvicorn.run(
+        "backend.app.main:app",
+        host="0.0.0.0",
+        port=8888,
+        reload=True,
+        log_level="info"
+    )
+
+if __name__ == "__main__":
+    start_server() 
