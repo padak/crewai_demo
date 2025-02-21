@@ -56,6 +56,13 @@ async def send_status_update(message):
         async with websockets.connect(config["ws_url"]) as websocket:
             await websocket.send(json.dumps(enhanced_message))
             logger.info(f"STATUS DEBUG - Successfully sent message for agent {agent_name} with status {status}")
+            # Allow for normal closure
+            await websocket.close(1000)
+    except websockets.exceptions.ConnectionClosed as e:
+        if e.code == 1000:
+            logger.info(f"WebSocket closed normally after sending status update: {str(e)}")
+        else:
+            logger.error(f"WebSocket connection closed unexpectedly: {str(e)}")
     except Exception as e:
         logger.error(f"Failed to send status update: {str(e)}")
 

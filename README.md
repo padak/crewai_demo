@@ -1,8 +1,25 @@
 # CrewAI Content Creation Demo
 
-This project demonstrates the use of CrewAI framework to create an automated content creation pipeline using multiple AI agents working together, with real-time monitoring capabilities.
+This project demonstrates the use of CrewAI framework to create an automated content creation pipeline using multiple AI agents working together, with real-time monitoring capabilities. The system uses OpenRouter as the LLM provider and includes a modern web interface for monitoring the agents' progress.
+
+## Features
+
+- **Multi-Agent Content Creation**
+  - Research Agent: Gathers and analyzes information
+  - Writer Agent: Creates engaging content
+  - Editor Agent: Polishes and optimizes content
+- **Real-Time Monitoring**
+  - WebSocket-based live updates
+  - Visual status tracking
+  - Agent progress visualization
+- **Modern Web Interface**
+  - React-based frontend
+  - Real-time status updates
+  - Clean, professional design
 
 ## Architecture Overview
+
+The system is composed of three main components that work together to create and monitor the content creation process:
 
 ```mermaid
 graph TB
@@ -56,27 +73,16 @@ graph TB
     class Monitor,WSS,WS monitor;
 ```
 
-## System Components
+The diagram above shows how the different components interact:
+1. The Frontend provides the user interface and real-time monitoring
+2. The Backend handles API requests and WebSocket communications
+3. The CrewAI Orchestration manages the content creation pipeline with specialized agents
 
-### 1. Frontend Monitor
-- Real-time agent status visualization
-- WebSocket-based live updates
-- Task progress tracking
-- Professional UI with React
-- Grouped message display
-- Agent workflow visualization
+## Prerequisites
 
-### 2. Backend Server
-- FastAPI-based REST API
-- WebSocket server for real-time communication
-- Task monitoring and status updates
-- Error handling and reconnection logic
-
-### 3. CrewAI Integration
-- Agent orchestration
-- Task execution
-- Progress monitoring
-- Status reporting
+- Python 3.8 or higher
+- Node.js 16 or higher
+- OpenRouter API key (get it from [OpenRouter](https://openrouter.ai/))
 
 ## Project Structure
 
@@ -104,120 +110,200 @@ graph TB
 └── .env                   # Environment variables (not tracked)
 ```
 
-## Setup
+## Installation
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/padak/crewai_demo.git
+git clone https://github.com/your-username/crewai_demo.git
 cd crewai_demo
 ```
 
 2. Create and activate a virtual environment:
 ```bash
+# On macOS/Linux
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate
+
+# On Windows
+python -m venv venv
+.\venv\Scripts\activate
 ```
 
-3. Install dependencies:
+3. Install Python dependencies:
 ```bash
+# Install main project dependencies
 pip install -r requirements.txt
-cd backend && pip install -r requirements.txt
-cd ../frontend && npm install
+
+# Install backend dependencies
+cd backend
+pip install -r requirements.txt
+cd ..
 ```
 
-4. Create a `.env` file from the template:
+4. Install frontend dependencies:
 ```bash
+cd frontend
+npm install
+cd ..
+```
+
+5. Set up environment variables:
+```bash
+# Copy the sample environment file
 cp .env.sample .env
-```
 
-5. Edit the `.env` file with your OpenRouter API key:
+# Edit .env with your OpenRouter API key
+# Replace 'your_api_key_here' with your actual API key
+echo "OPENROUTER_API_KEY=your_api_key_here" >> .env
 ```
-OPENROUTER_API_KEY=your_api_key_here
-OPENAI_API_BASE=https://openrouter.ai/api/v1
-```
-
-You can get your OpenRouter API key from [https://openrouter.ai/](https://openrouter.ai/).
 
 ## Running the Application
 
-Start both the backend server and frontend monitor:
+You can run the application in two ways:
 
-```bash
-./run_monitor.sh
-```
+### Method 1: Using Separate Terminals (Recommended for Development)
 
-Or start them separately:
-
-1. Backend:
+1. Start the backend server (Terminal 1):
 ```bash
 cd backend
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.main:app --host localhost --port 8000 --reload
 ```
 
-2. Frontend (in a new terminal):
+2. Start the frontend development server (Terminal 2):
 ```bash
 cd frontend
 npm start
 ```
 
-## Monitoring Features
+The application will be available at:
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- WebSocket: ws://localhost:8000/ws
 
-1. **Real-time Agent Status**
-   - Visual status indicators
-   - Task progress tracking
-   - Live updates via WebSocket
+### Method 2: Using Process Manager (Recommended for Production)
 
-2. **Message Grouping**
-   - Organized by agent
-   - Chronological ordering
-   - Duplicate filtering
-   - System vs. Agent message differentiation
+1. Install PM2 globally:
+```bash
+npm install -m pm2 -g
+```
 
-3. **Professional UI**
-   - Clean, modern design
-   - Responsive layout
-   - Color-coded status indicators
-   - Easy-to-read typography
+2. Create an ecosystem file (ecosystem.config.js):
+```bash
+cd crewai_demo
+echo 'module.exports = {
+  apps: [
+    {
+      name: "crewai-backend",
+      cwd: "./backend",
+      script: "uvicorn",
+      args: "app.main:app --host localhost --port 8000",
+      interpreter: "./venv/bin/python",
+      env: {
+        NODE_ENV: "development",
+      },
+    },
+    {
+      name: "crewai-frontend",
+      cwd: "./frontend",
+      script: "npm",
+      args: "start",
+      env: {
+        NODE_ENV: "development",
+      },
+    },
+  ],
+};' > ecosystem.config.js
+```
 
-4. **Error Handling**
-   - Automatic reconnection
-   - Error state visualization
-   - User-friendly error messages
+3. Start all services:
+```bash
+pm2 start ecosystem.config.js
+```
 
-## How it Works
+4. Monitor the services:
+```bash
+pm2 monit
+```
 
-The system operates in three main layers:
+To stop all services:
+```bash
+pm2 stop all
+```
 
-1. **CrewAI Layer**
-   - Manages agent interactions
-   - Executes tasks
-   - Generates content
-   - Reports progress
+## Usage
 
-2. **Monitoring Layer**
-   - Tracks agent status
-   - Collects task progress
-   - Manages WebSocket connections
-   - Handles error states
+1. Open your browser and navigate to http://localhost:3000
+2. Enter a topic in the input field
+3. Click "Start CrewAI" to begin the content creation process
+4. Monitor the progress of each agent in real-time
+5. The final content will be displayed when the process is complete
 
-3. **Presentation Layer**
-   - Displays real-time updates
-   - Shows agent status
-   - Presents task progress
-   - Manages user interactions
+## Configuration
 
-Each agent's progress is tracked and displayed in real-time, allowing you to monitor the content creation process from start to finish.
+### LLM Configuration
 
-## Model Configuration
+The project uses OpenRouter as the LLM provider. The current configuration uses the following model:
 
-By default, the project uses `gpt-4-turbo` through OpenRouter. Available models include:
-- openai/gpt-4-turbo
+```python
+llm = ChatOpenAI(
+    model_name='openai/gpt-4-turbo-preview',
+    temperature=0.8,
+    openai_api_key=os.environ["OPENROUTER_API_KEY"],
+    base_url="https://openrouter.ai/api/v1",
+    model_kwargs={
+        "headers": {
+            "HTTP-Referer": "https://github.com/crewai",
+            "X-Title": "CrewAI Demo"
+        }
+    }
+)
+```
+
+You can modify the model and parameters in `content_creation_crew.py`.
+
+### Available Models
+
+Through OpenRouter, you can use various models:
+- openai/gpt-4-turbo-preview
 - openai/gpt-3.5-turbo
 - anthropic/claude-2
 - google/palm-2
 
-See more models at [OpenRouter's documentation](https://openrouter.ai/docs#models).
+See [OpenRouter's documentation](https://openrouter.ai/docs#models) for the complete list.
+
+## Troubleshooting
+
+### Common Issues
+
+1. **WebSocket Connection Errors**
+   - Ensure both backend and frontend servers are running
+   - Check if port 8000 is available
+   - Verify your firewall settings
+
+2. **API Key Issues**
+   - Confirm your OpenRouter API key is correctly set in .env
+   - Ensure the .env file is in the project root
+
+3. **Node.js Errors**
+   - Try clearing npm cache: `npm cache clean --force`
+   - Delete node_modules and reinstall: `rm -rf node_modules && npm install`
+
+4. **Python Environment Issues**
+   - Ensure you're using the correct virtual environment
+   - Try recreating the virtual environment if dependencies conflict
+
+### Getting Help
+
+If you encounter issues:
+1. Check the backend logs in the terminal running uvicorn
+2. Check the frontend logs in the terminal running npm
+3. Check the browser console for frontend errors
+4. Open an issue on GitHub with the error details
 
 ## Contributing
 
-Feel free to submit issues, fork the repository, and create pull requests for any improvements. 
+Contributions are welcome! Please feel free to submit issues and pull requests.
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details. 

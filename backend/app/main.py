@@ -67,7 +67,11 @@ async def websocket_endpoint(websocket: WebSocket):
                         "type": "ack",
                         "timestamp": datetime.now().isoformat()
                     })
-                except WebSocketDisconnect:
+                except WebSocketDisconnect as e:
+                    if e.code == 1000:  # Normal closure
+                        logger.info(f"WebSocket closed normally: {str(e)}")
+                    else:
+                        logger.error(f"WebSocket disconnected: {str(e)}")
                     break
                 except Exception as e:
                     logger.error(f"Error processing message: {str(e)}")
