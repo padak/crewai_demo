@@ -4,10 +4,6 @@ python-dotenv>=1.0.0
 crewai>=0.14.0
 langchain-openai>=0.0.5
 websockets>=12.0
-jinja2>=3.1.0
 pydantic>=2.0.0
-typing-extensions>=4.9.0
-python-multipart>=0.0.9
 crewai-tools
-duckduckgo-search>=3.9.3  # For research capabilities
-litellm>=1.15.0
+duckduckgo-search>=3.9.3

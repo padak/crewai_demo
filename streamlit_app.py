@@ -64,7 +64,7 @@ if st.button("Start Content Creation"):
     # Show spinner while waiting for the backend to return the final content.
     with st.spinner("Processing your request, please wait..."):
         try:
-            response = requests.post("http://localhost:8000/create-content", json={"topic": topic})
+            response = requests.post("http://localhost:8888/create-content", json={"topic": topic})
             if response.ok:
                 final_content = response.json().get("content", "")
                 st.success("Final Content:")

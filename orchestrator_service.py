@@ -11,10 +11,8 @@ from tasks.content_tasks import (
 )
 import crewai_monitor
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import uvicorn
 import asyncio
@@ -130,146 +128,13 @@ load_dotenv()
 
 app = FastAPI(title="Content Orchestrator")
 
-# Create templates directory if it doesn't exist
-os.makedirs("templates", exist_ok=True)
-
-# Update the HTML template to handle structured messages
-with open("templates/logs.html", "w") as f:
-    f.write(r"""
-<!DOCTYPE html>
-<html>
-<head>
-    <title>CrewAI Pipeline Logs</title>
-    <style>
-        body {
-            font-family: monospace;
-            background: #1e1e1e;
-            color: #d4d4d4;
-            margin: 0;
-            padding: 20px;
-        }
-        .log-container {
-            background: #2d2d2d;
-            border-radius: 5px;
-            padding: 15px;
-            margin-bottom: 20px;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-        .log-entry {
-            margin: 5px 0;
-            padding: 5px;
-            border-bottom: 1px solid #3d3d3d;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-        .timestamp { color: #569cd6; }
-        .logger-name { color: #ce9178; }
-        .level {
-            margin: 0 10px;
-            padding: 2px 5px;
-            border-radius: 3px;
-            font-weight: bold;
-        }
-        .level-INFO { color: #3dc9b0; }
-        .level-WARNING { color: #dcdcaa; }
-        .level-ERROR { color: #f44747; }
-        .message { 
-            color: #d4d4d4;
-            font-family: 'Consolas', monospace;
-        }
-        pre {
-            background: #1e1e1e;
-            padding: 10px;
-            border-radius: 4px;
-            margin: 5px 0;
-            overflow-x: auto;
-        }
-        .debug-prefix {
-            color: #569cd6;
-            font-weight: bold;
-        }
-    </style>
-    <script>
-        function formatJSON(obj) {
-            return JSON.stringify(obj, null, 2);
-        }
-
-        function renderMessage(message) {
-            if (typeof message === 'string') return message;
-            
-            switch(message.type) {
-                case 'json':
-                    return `<pre>${formatJSON(message.data)}</pre>`;
-                case 'debug':
-                    return `<span class="debug-prefix">${message.prefix}</span>\n<pre>${formatJSON(message.data)}</pre>`;
-                case 'text':
-                default:
-                    return message.data;
-            }
-        }
-
-        function connectWebSocket() {
-            // Use port 8000 for WebSocket connections to FastAPI
-            const wsPort = 8000;
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const ws = new WebSocket(`${wsProtocol}//localhost:${wsPort}/ws`);
-            
-            ws.onmessage = function(event) {
-                const log = JSON.parse(event.data);
-                const container = document.getElementById('log-container');
-                const logEntry = document.createElement('div');
-                logEntry.className = 'log-entry';
-                logEntry.innerHTML = `
-                    <span class="timestamp">${log.timestamp}</span>
-                    <span class="level level-${log.level}">${log.level}</span>
-                    <span class="logger-name">[${log.logger}]</span>
-                    <div class="message">${renderMessage(log.message)}</div>
-                `;
-                container.appendChild(logEntry);
-                
-                if (container.scrollTop + container.clientHeight >= container.scrollHeight - 100) {
-                    container.scrollTop = container.scrollHeight;
-                }
-            };
-            
-            ws.onclose = function() {
-                setTimeout(connectWebSocket, 1000);
-            };
-        }
-        
-        document.addEventListener('DOMContentLoaded', connectWebSocket);
-    </script>
-</head>
-<body>
-    <div id="log-container" class="log-container">
-        Connecting to log stream...
-    </div>
-</body>
-</html>
-""")
-
-# Setup templates
-templates = Jinja2Templates(directory="templates")
-
-# Define routes
-@app.get("/", response_class=HTMLResponse)
-async def root(request: Request):
-    return templates.TemplateResponse("logs.html", {"request": request})
-
-@app.get("/logs/data")
-async def get_log_data():
-    return list(log_queue.queue)
-
 # Define a Pydantic model for input validation
 class ContentRequest(BaseModel):
     topic: str
 
-
 # Use a ThreadPoolExecutor to run synchronous code without blocking the event loop
 executor = ThreadPoolExecutor(max_workers=1)
 
-# After imports, before app initialization
 # Enhanced logging setup
 def setup_comprehensive_logging():
     # Configure root logger to capture everything
@@ -373,6 +238,16 @@ def run_content_creation(topic: str):
 # Initialize comprehensive logging
 queue_handler = setup_comprehensive_logging()
 
+@app.get("/")
+async def root():
+    """API status endpoint"""
+    return {"status": "running"}
+
+@app.get("/logs/data")
+async def get_log_data():
+    """Get all logs from the queue"""
+    return list(log_queue.queue)
+
 @app.post("/create-content")
 async def create_content(request: ContentRequest):
     """
@@ -416,5 +291,5 @@ app.add_middleware(
 )
 
 if __name__ == "__main__":
-    # Run the FastAPI app with uvicorn on port 8000, binding only to localhost
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
+    # Run the FastAPI app with uvicorn on port 8888
+    uvicorn.run(app, host="0.0.0.0", port=8888, log_level="info")
