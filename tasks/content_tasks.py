@@ -26,7 +26,7 @@ def create_writing_task(agent) -> Task:
             1. Have an engaging introduction
             2. Cover all key points from the research
             3. Include relevant examples and statistics
-            4. Be approximately 1000 words
+            4. Be approximately 200 words
             
             Focus on making complex information accessible to a general audience.
         """),

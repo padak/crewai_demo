@@ -1,0 +1,109 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CrewAI Pipeline Logs</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            margin: 0;
+            padding: 20px;
+        }
+        .log-container {
+            background: #2d2d2d;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-bottom: 1px solid #3d3d3d;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .timestamp { color: #569cd6; }
+        .logger-name { color: #ce9178; }
+        .level {
+            margin: 0 10px;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .level-INFO { color: #3dc9b0; }
+        .level-WARNING { color: #dcdcaa; }
+        .level-ERROR { color: #f44747; }
+        .message { 
+            color: #d4d4d4;
+            font-family: 'Consolas', monospace;
+        }
+        pre {
+            background: #1e1e1e;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 5px 0;
+            overflow-x: auto;
+        }
+        .debug-prefix {
+            color: #569cd6;
+            font-weight: bold;
+        }
+    </style>
+    <script>
+        function formatJSON(obj) {
+            return JSON.stringify(obj, null, 2);
+        }
+
+        function renderMessage(message) {
+            if (typeof message === 'string') return message;
+            
+            switch(message.type) {
+                case 'json':
+                    return `<pre>${formatJSON(message.data)}</pre>`;
+                case 'debug':
+                    return `<span class="debug-prefix">${message.prefix}</span>\n<pre>${formatJSON(message.data)}</pre>`;
+                case 'text':
+                default:
+                    return message.data;
+            }
+        }
+
+        function connectWebSocket() {
+            const ws = new WebSocket('ws://' + window.location.host + '/ws');
+            
+            ws.onmessage = function(event) {
+                const log = JSON.parse(event.data);
+                const container = document.getElementById('log-container');
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                logEntry.innerHTML = `
+                    <span class="timestamp">${log.timestamp}</span>
+                    <span class="level level-${log.level}">${log.level}</span>
+                    <span class="logger-name">[${log.logger}]</span>
+                    <div class="message">${renderMessage(log.message)}</div>
+                `;
+                container.appendChild(logEntry);
+                
+                if (container.scrollTop + container.clientHeight >= container.scrollHeight - 100) {
+                    container.scrollTop = container.scrollHeight;
+                }
+            };
+            
+            ws.onclose = function() {
+                setTimeout(connectWebSocket, 1000);
+            };
+        }
+        
+        document.addEventListener('DOMContentLoaded', connectWebSocket);
+    </script>
+</head>
+<body>
+    <div id="log-container" class="log-container">
+        Connecting to log stream...
+    </div>
+</body>
+</html>
