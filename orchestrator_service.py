@@ -210,7 +210,10 @@ with open("templates/logs.html", "w") as f:
         }
 
         function connectWebSocket() {
-            const ws = new WebSocket('ws://' + window.location.host + '/ws');
+            // Use port 8000 for WebSocket connections to FastAPI
+            const wsPort = 8000;
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${wsProtocol}//localhost:${wsPort}/ws`);
             
             ws.onmessage = function(event) {
                 const log = JSON.parse(event.data);
@@ -413,5 +416,5 @@ app.add_middleware(
 )
 
 if __name__ == "__main__":
-    # Run the FastAPI app with uvicorn
+    # Run the FastAPI app with uvicorn on port 8000, binding only to localhost
     uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
