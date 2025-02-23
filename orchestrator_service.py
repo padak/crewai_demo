@@ -25,6 +25,10 @@ from datetime import datetime
 import json
 from typing import List
 from fastapi.middleware.cors import CORSMiddleware
+try:
+    import tomli as toml  # Python 3.11+
+except ImportError:
+    import toml  # Fallback for older versions
 
 # Create a queue to store logs
 log_queue = Queue(maxsize=1000)  # Store last 1000 logs
@@ -123,8 +127,34 @@ logger = logging.getLogger(__name__)
 queue_handler = QueueHandler()
 logger.addHandler(queue_handler)
 
-# Load environment variables
+def load_secrets():
+    """Load secrets from .streamlit/secrets.toml file in user's home directory"""
+    home_dir = os.path.expanduser("~")
+    secrets_path = os.path.join(home_dir, '.streamlit', 'secrets.toml')
+    
+    if not os.path.exists(secrets_path):
+        logger.warning(f"Secrets file not found at {secrets_path}, falling back to environment variables")
+        return {}
+        
+    try:
+        with open(secrets_path, 'rb') as f:  # 'rb' for tomli
+            secrets = toml.load(f)
+        logger.info("Successfully loaded secrets from .streamlit/secrets.toml")
+        return secrets
+    except Exception as e:
+        logger.error(f"Could not read secrets file at {secrets_path}: {str(e)}")
+        return {}
+
+# Load environment variables from .env file first
 load_dotenv()
+
+# Then try to load from .streamlit/secrets.toml and update environment
+secrets = load_secrets()
+if "OPENROUTER_API_KEY" in secrets:
+    os.environ["OPENROUTER_API_KEY"] = secrets["OPENROUTER_API_KEY"]
+    logger.info("Loaded OPENROUTER_API_KEY from .streamlit/secrets.toml")
+elif "OPENROUTER_API_KEY" not in os.environ:
+    logger.warning("OPENROUTER_API_KEY not found in secrets or environment variables")
 
 app = FastAPI(title="Content Orchestrator")
 
