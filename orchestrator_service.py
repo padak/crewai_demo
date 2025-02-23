@@ -248,7 +248,7 @@ async def get_log_data():
     """Get all logs from the queue"""
     return list(log_queue.queue)
 
-@app.post("/create-content")
+@app.post("/create-content", response_model=dict)
 async def create_content(request: ContentRequest):
     """
     Main endpoint for content creation. Accepts a topic and returns the final content.
@@ -259,7 +259,7 @@ async def create_content(request: ContentRequest):
         result = await asyncio.get_event_loop().run_in_executor(
             executor, run_content_creation, topic
         )
-        return {"content": result}
+        return {"content": result, "status": "success"}
     except Exception as e:
         logger.error("Error in content creation: %s", str(e))
         raise HTTPException(status_code=500, detail=str(e))
@@ -286,10 +286,19 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # In production, replace with specific origins
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,  # Cache preflight requests for 1 hour
 )
 
 if __name__ == "__main__":
     # Run the FastAPI app with uvicorn on port 8888
-    uvicorn.run(app, host="0.0.0.0", port=8888, log_level="info")
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8888,
+        log_level="info",
+        proxy_headers=True,  # Enable proxy headers
+        forwarded_allow_ips="*"  # Allow forwarded IPs
+    )
