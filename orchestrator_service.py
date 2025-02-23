@@ -357,15 +357,33 @@ async def create_content(request: ContentRequest):
                 executor, run_content_creation, topic
             )
 
+            # Convert CrewAI output to string and create response
+            if hasattr(result, 'raw'):  # Handle CrewOutput object
+                content = str(result.raw)
+            elif hasattr(result, '__str__'):  # Handle any other object with string representation
+                content = str(result)
+            else:  # Fallback
+                content = json.dumps(result)
+
             # Send the final result
             execution_time = time.time() - start_time
             logger.info(f"Content creation completed in {execution_time:.2f} seconds")
-            yield json.dumps({"content": result, "status": "success"})
+            
+            response_data = {
+                "content": content,
+                "status": "success",
+                "execution_time": f"{execution_time:.2f}s"
+            }
+            yield json.dumps(response_data)
 
         except Exception as e:
             error_msg = f"Error in content creation for topic '{topic}': {str(e)}"
             logger.error(error_msg)
-            yield json.dumps({"error": error_msg, "status": "error"})
+            yield json.dumps({
+                "error": error_msg,
+                "status": "error",
+                "details": str(e.__class__.__name__)
+            })
 
     return StreamingResponse(
         content_stream(),
