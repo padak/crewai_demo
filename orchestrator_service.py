@@ -37,21 +37,43 @@ log_queue = Queue(maxsize=1000)  # Store last 1000 logs
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
+        self._lock = asyncio.Lock()
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
-        self.active_connections.append(websocket)
+        async with self._lock:
+            self.active_connections.append(websocket)
+        logger.info(f"New WebSocket connection established. Total connections: {len(self.active_connections)}")
 
     def disconnect(self, websocket: WebSocket):
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
+        try:
+            if websocket in self.active_connections:
+                self.active_connections.remove(websocket)
+                logger.info(f"WebSocket disconnected. Remaining connections: {len(self.active_connections)}")
+        except Exception as e:
+            logger.error(f"Error disconnecting WebSocket: {str(e)}")
 
     async def broadcast(self, message: str):
+        if not self.active_connections:
+            return
+            
+        disconnected = []
         for connection in self.active_connections:
             try:
                 await connection.send_text(message)
-            except:
-                await self.disconnect(connection)
+            except WebSocketDisconnect:
+                disconnected.append(connection)
+            except Exception as e:
+                logger.error(f"Error broadcasting message: {str(e)}")
+                disconnected.append(connection)
+                
+        # Clean up disconnected connections
+        for conn in disconnected:
+            self.disconnect(conn)
+
+# Create a single event loop for the application
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 
 manager = ConnectionManager()
 
@@ -113,8 +135,14 @@ class QueueHandler(logging.Handler):
                 log_queue.get()
             log_queue.put(log_entry)
             
-            # Broadcast to WebSocket clients
-            asyncio.create_task(manager.broadcast(json.dumps(log_entry)))
+            # Use create_task properly with the event loop
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    manager.broadcast(json.dumps(log_entry)), 
+                    loop
+                )
+            except Exception as e:
+                logger.error(f"Error broadcasting log: {str(e)}")
         except Exception as e:
             print(f"Error in log handler: {str(e)}")
 
@@ -282,16 +310,24 @@ async def get_log_data():
 async def create_content(request: ContentRequest):
     """
     Main endpoint for content creation. Accepts a topic and returns the final content.
+    The task runs in a thread pool to avoid blocking the event loop.
     """
     topic = request.topic
     try:
-        # Run the content creation synchronously in a thread pool to avoid blocking
-        result = await asyncio.get_event_loop().run_in_executor(
-            executor, run_content_creation, topic
+        # Run the content creation in a thread pool with a timeout
+        result = await asyncio.wait_for(
+            asyncio.get_event_loop().run_in_executor(executor, run_content_creation, topic),
+            timeout=300  # 5 minutes timeout
         )
         return {"content": result, "status": "success"}
+    except asyncio.TimeoutError:
+        logger.error(f"Content creation for topic '{topic}' timed out after 5 minutes")
+        raise HTTPException(
+            status_code=504,
+            detail="Content creation timed out. Please try again or check the logs for progress."
+        )
     except Exception as e:
-        logger.error("Error in content creation: %s", str(e))
+        logger.error(f"Error in content creation for topic '{topic}': {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Add WebSocket endpoint
@@ -323,12 +359,17 @@ app.add_middleware(
 )
 
 if __name__ == "__main__":
-    # Run the FastAPI app with uvicorn on port 8888
-    uvicorn.run(
+    # Run the FastAPI app with uvicorn
+    config = uvicorn.Config(
         app,
         host="0.0.0.0",
         port=8888,
         log_level="info",
-        proxy_headers=True,  # Enable proxy headers
-        forwarded_allow_ips="*"  # Allow forwarded IPs
+        proxy_headers=True,
+        forwarded_allow_ips="*",
+        timeout_keep_alive=300,  # 5 minutes keep-alive timeout
+        loop="asyncio",
+        workers=1  # Single worker to maintain WebSocket state
     )
+    server = uvicorn.Server(config)
+    server.run()
