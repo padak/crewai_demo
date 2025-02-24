@@ -44,3 +44,5 @@ frontend/build/
 frontend/package-lock.json
 frontend/yarn.lock
 frontend/yarn-error.log
+
+.streamlit/
