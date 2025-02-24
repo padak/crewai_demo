@@ -1,309 +1,135 @@
-# CrewAI Content Creation Demo
+# CrewAI Content Orchestrator with HITL
 
-This project demonstrates the use of CrewAI framework to create an automated content creation pipeline using multiple AI agents working together, with real-time monitoring capabilities. The system uses OpenRouter as the LLM provider and includes a modern web interface for monitoring the agents' progress.
+This project demonstrates how to use CrewAI with Human-in-the-Loop (HITL) capabilities for content generation.
 
-## Features
+## Setup
 
-- **Multi-Agent Content Creation**
-  - Research Agent: Gathers and analyzes information
-  - Writer Agent: Creates engaging content
-  - Editor Agent: Polishes and optimizes content
-- **Real-Time Monitoring**
-  - WebSocket-based live updates
-  - Visual status tracking
-  - Agent progress visualization
-- **Modern Web Interface**
-  - React-based frontend
-  - Real-time status updates
-  - Clean, professional design
+1. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-## Architecture Overview
+2. Create a `.streamlit/secrets.toml` file with your OpenRouter API key:
+   ```toml
+   OPENROUTER_API_KEY = "your-api-key-here"
+   ```
 
-The system is composed of three main components that work together to create and monitor the content creation process:
+## Running the Service
 
-```mermaid
-graph TB
-    subgraph Frontend[Frontend Monitor - React]
-        UI[User Interface]
-        WS[WebSocket Client]
-        State[State Management]
-    end
+1. Start the API wrapper:
+   ```bash
+   export DATA_APP_ENTRYPOINT="orchestrator_service.py"
+   uvicorn api_wrapper:app --host 0.0.0.0 --port 8888 \
+     --proxy-headers --forwarded-allow-ips "*" \
+     --timeout-keep-alive 300 \
+     --timeout-graceful-shutdown 300 --loop asyncio \
+     --workers 1 --limit-concurrency 1000 \
+     --backlog 2048 --no-server-header --no-date-header
+   ```
 
-    subgraph Backend[Backend Server - FastAPI]
-        API[REST API]
-        WSS[WebSocket Server]
-        Monitor[Monitoring System]
-    end
+2. (Optional) Start the webhook receiver for testing:
+   ```bash
+   python webhook_receiver.py --port 8889
+   ```
 
-    subgraph CrewAI[CrewAI Orchestration]
-        direction TB
-        T1[Research Task] --> A1[Research Agent]
-        A1 --> |Research Summary| T2[Writing Task]
-        T2 --> A2[Writer Agent]
-        A2 --> |Draft Content| T3[Editing Task]
-        T3 --> A3[Editor Agent]
-        A3 --> |Final Content| Output[Polished Blog Post]
-        
-        style CrewAI fill:#f5f5f5,stroke:#333,stroke-width:2px
-        style A1 fill:#d4f1f4,stroke:#333
-        style A2 fill:#d4f1f4,stroke:#333
-        style A3 fill:#d4f1f4,stroke:#333
-        style T1 fill:#e1f7d5,stroke:#333
-        style T2 fill:#e1f7d5,stroke:#333
-        style T3 fill:#e1f7d5,stroke:#333
-        style Output fill:#ffe5e5,stroke:#333
-    end
+## Testing the HITL Workflow
 
-    Input[Topic Input] --> API
-    API --> CrewAI
-    CrewAI -- Status Updates --> Monitor
-    Monitor -- Real-time Updates --> WSS
-    WSS -- WebSocket Messages --> WS
-    WS --> State
-    State --> UI
-    
-    classDef task fill:#e1f7d5,stroke:#333,stroke-width:1px;
-    classDef agent fill:#d4f1f4,stroke:#333,stroke-width:1px;
-    classDef io fill:#ffe5e5,stroke:#333,stroke-width:1px;
-    classDef monitor fill:#f8d7da,stroke:#333,stroke-width:1px;
-    
-    class T1,T2,T3 task;
-    class A1,A2,A3 agent;
-    class Input,Output io;
-    class Monitor,WSS,WS monitor;
-```
+You can test the HITL workflow using the provided test client:
 
-The diagram above shows how the different components interact:
-1. The Frontend provides the user interface and real-time monitoring
-2. The Backend handles API requests and WebSocket communications
-3. The CrewAI Orchestration manages the content creation pipeline with specialized agents
-
-## Prerequisites
-
-- Python 3.8 or higher
-- Node.js 16 or higher
-- OpenRouter API key (get it from [OpenRouter](https://openrouter.ai/))
-
-## Project Structure
-
-```
-.
-├── frontend/                # React-based monitoring interface
-│   ├── src/
-│   │   ├── App.js          # Main application component
-│   │   └── App.css         # Styling
-│   └── package.json        # Frontend dependencies
-├── backend/
-│   ├── app/
-│   │   └── main.py         # FastAPI server implementation
-│   └── requirements.txt    # Backend dependencies
-├── agents/
-│   ├── research_agent.py   # Research analyst agent
-│   ├── writer_agent.py     # Content writer agent
-│   └── editor_agent.py     # Content editor agent
-├── tasks/
-│   └── content_tasks.py    # Task definitions
-├── content_creation_crew.py # Main CrewAI script
-├── requirements.txt        # Project dependencies
-├── run_monitor.sh         # Startup script
-├── .env.sample            # Template for environment variables
-└── .env                   # Environment variables (not tracked)
-```
-
-## Installation
-
-1. Clone the repository:
 ```bash
-git clone https://github.com/your-username/crewai_demo.git
-cd crewai_demo
+# Start a job and provide feedback
+python hitl_test_client.py --topic "Climate Change Solutions"
+
+# Start a job and approve the content
+python hitl_test_client.py --topic "Space Exploration" --approve
+
+# Start a job with custom feedback
+python hitl_test_client.py --topic "Quantum Computing" --feedback "Please focus more on practical applications and less on theory."
 ```
 
-2. Create and activate a virtual environment:
+## API Endpoints
+
+### Starting a Content Creation Job
+
 ```bash
-# On macOS/Linux
-python -m venv venv
-source venv/bin/activate
-
-# On Windows
-python -m venv venv
-.\venv\Scripts\activate
+curl -X POST "http://localhost:8888/invoke" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "function": "create_content_with_hitl",
+    "args": ["Your Topic Here"],
+    "webhook_url": "http://localhost:8889/webhook"
+  }'
 ```
 
-3. Install Python dependencies:
+### Checking Job Status
+
 ```bash
-# Install main project dependencies
-pip install -r requirements.txt
-
-# Install backend dependencies
-cd backend
-pip install -r requirements.txt
-cd ..
+curl "http://localhost:8888/job/{job_id}"
 ```
 
-4. Install frontend dependencies:
+### Providing Feedback
+
 ```bash
-cd frontend
-npm install
-cd ..
+# Approve content
+curl -X POST "http://localhost:8888/job/{job_id}/feedback" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "feedback": "Looks great!",
+    "approved": true
+  }'
+
+# Request revisions
+curl -X POST "http://localhost:8888/job/{job_id}/feedback" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "feedback": "Please make the content more concise and add more examples.",
+    "approved": false
+  }'
 ```
 
-5. Set up environment variables:
+### Listing All Jobs
+
 ```bash
-# Copy the sample environment file
-cp .env.sample .env
-
-# Edit .env with your OpenRouter API key
-# Replace 'your_api_key_here' with your actual API key
-echo "OPENROUTER_API_KEY=your_api_key_here" >> .env
+curl "http://localhost:8888/jobs"
 ```
 
-## Running the Application
+## How the HITL Workflow Works
 
-You can run the application in two ways:
+1. **Initial Request**: Client makes a request to `/invoke` with the `create_content_with_hitl` function.
 
-### Method 1: Using Separate Terminals (Recommended for Development)
+2. **Background Processing**: The system processes the request asynchronously.
 
-1. Start the backend server (Terminal 1):
+3. **Pending Approval**: When content is ready for review, the job status changes to `pending_approval`.
+
+4. **Webhook Notification**: If a webhook URL was provided, a notification is sent.
+
+5. **Human Review**: A human reviews the content and provides feedback.
+
+6. **Feedback Processing**:
+   - If approved, the job is marked as completed.
+   - If not approved, the content is regenerated with the feedback.
+
+7. **Final Result**: The final content is available through the job status endpoint.
+
+## Using Webhooks
+
+Webhooks allow your application to receive real-time notifications about job status changes. To use webhooks:
+
+1. Provide a `webhook_url` parameter when starting a job.
+2. Set up an endpoint in your application to receive POST requests.
+3. Process the webhook data according to the job status.
+
+Webhook payloads include:
+- `job_id`: The ID of the job
+- `status`: The current status (e.g., `pending_approval`, `completed`, `error`)
+- `function`: The function that was called
+- `result`: The result data (for completed jobs)
+
+## Docker Deployment
+
+Build and run the Docker container:
+
 ```bash
-cd backend
-uvicorn app.main:app --host localhost --port 8000 --reload
-```
-
-2. Start the frontend development server (Terminal 2):
-```bash
-cd frontend
-npm start
-```
-
-The application will be available at:
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
-- WebSocket: ws://localhost:8000/ws
-
-### Method 2: Using Process Manager (Recommended for Production)
-
-1. Install PM2 globally:
-```bash
-npm install -m pm2 -g
-```
-
-2. Create an ecosystem file (ecosystem.config.js):
-```bash
-cd crewai_demo
-echo 'module.exports = {
-  apps: [
-    {
-      name: "crewai-backend",
-      cwd: "./backend",
-      script: "uvicorn",
-      args: "app.main:app --host localhost --port 8000",
-      interpreter: "./venv/bin/python",
-      env: {
-        NODE_ENV: "development",
-      },
-    },
-    {
-      name: "crewai-frontend",
-      cwd: "./frontend",
-      script: "npm",
-      args: "start",
-      env: {
-        NODE_ENV: "development",
-      },
-    },
-  ],
-};' > ecosystem.config.js
-```
-
-3. Start all services:
-```bash
-pm2 start ecosystem.config.js
-```
-
-4. Monitor the services:
-```bash
-pm2 monit
-```
-
-To stop all services:
-```bash
-pm2 stop all
-```
-
-## Usage
-
-1. Open your browser and navigate to http://localhost:3000
-2. Enter a topic in the input field
-3. Click "Start CrewAI" to begin the content creation process
-4. Monitor the progress of each agent in real-time
-5. The final content will be displayed when the process is complete
-
-## Configuration
-
-### LLM Configuration
-
-The project uses OpenRouter as the LLM provider. The current configuration uses the following model:
-
-```python
-llm = ChatOpenAI(
-    model_name='openai/gpt-4-turbo-preview',
-    temperature=0.8,
-    openai_api_key=os.environ["OPENROUTER_API_KEY"],
-    base_url="https://openrouter.ai/api/v1",
-    model_kwargs={
-        "headers": {
-            "HTTP-Referer": "https://github.com/crewai",
-            "X-Title": "CrewAI Demo"
-        }
-    }
-)
-```
-
-You can modify the model and parameters in `content_creation_crew.py`.
-
-### Available Models
-
-Through OpenRouter, you can use various models:
-- openai/gpt-4-turbo-preview
-- openai/gpt-3.5-turbo
-- anthropic/claude-2
-- google/palm-2
-
-See [OpenRouter's documentation](https://openrouter.ai/docs#models) for the complete list.
-
-## Troubleshooting
-
-### Common Issues
-
-1. **WebSocket Connection Errors**
-   - Ensure both backend and frontend servers are running
-   - Check if port 8000 is available
-   - Verify your firewall settings
-
-2. **API Key Issues**
-   - Confirm your OpenRouter API key is correctly set in .env
-   - Ensure the .env file is in the project root
-
-3. **Node.js Errors**
-   - Try clearing npm cache: `npm cache clean --force`
-   - Delete node_modules and reinstall: `rm -rf node_modules && npm install`
-
-4. **Python Environment Issues**
-   - Ensure you're using the correct virtual environment
-   - Try recreating the virtual environment if dependencies conflict
-
-### Getting Help
-
-If you encounter issues:
-1. Check the backend logs in the terminal running uvicorn
-2. Check the frontend logs in the terminal running npm
-3. Check the browser console for frontend errors
-4. Open an issue on GitHub with the error details
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues and pull requests.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details. 
+docker build -t crewai-hitl .
+docker run -p 8888:8888 -v $(pwd)/.streamlit:/app/.streamlit crewai-hitl
+``` 
