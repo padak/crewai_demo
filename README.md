@@ -5,17 +5,20 @@ This project demonstrates how to use CrewAI with Human-in-the-Loop (HITL) capabi
 ## Setup
 
 1. Create and activate a virtual environment:
+
    ```bash
    python -m venv .venv
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
 
 2. Install dependencies:
+
    ```bash
    pip install -r requirements.txt
    ```
 
 3. Create a `.streamlit/secrets.toml` file with your OpenRouter API key:
+
    ```toml
    OPENROUTER_API_KEY = "your-api-key-here"
    ```
@@ -23,6 +26,7 @@ This project demonstrates how to use CrewAI with Human-in-the-Loop (HITL) capabi
 ## Running the Service
 
 1. Start the API wrapper:
+
    ```bash
    source .venv/bin/activate
    export DATA_APP_ENTRYPOINT="orchestrator_service.py"
@@ -35,6 +39,7 @@ This project demonstrates how to use CrewAI with Human-in-the-Loop (HITL) capabi
    ```
 
 2. Start the webhook receiver for testing (in a separate terminal):
+
    ```bash
    source .venv/bin/activate
    python webhook_receiver.py --port 8889
@@ -70,21 +75,24 @@ When you run the test client, you'll see:
 6. The final revised content
 
 The webhook receiver will display notifications at key points in the process:
+
 - When content is ready for human review
 - When the job is completed after feedback
 
-You can view all received webhooks by visiting http://localhost:8889/ in your browser.
+You can view all received webhooks by visiting <http://localhost:8889/> in your browser.
 
 ## API Endpoints
 
 ### Starting a Content Creation Job
 
 ```bash
-curl -X POST "http://localhost:8888/invoke" \
+curl -X POST "http://localhost:8888/kickoff" \
   -H "Content-Type: application/json" \
   -d '{
-    "function": "create_content_with_hitl",
-    "args": ["Your Topic Here"],
+    "crew": "ContentCreationCrew",
+    "inputs": {
+      "topic": "Your Topic Here"
+    },
     "webhook_url": "http://localhost:8889/webhook"
   }'
 ```
@@ -121,11 +129,17 @@ curl -X POST "http://localhost:8888/job/{job_id}/feedback" \
 curl "http://localhost:8888/jobs"
 ```
 
+### Listing Available Crews
+
+```bash
+curl "http://localhost:8888/list-crews"
+```
+
 ## How the HITL Workflow Works
 
-1. **Initial Request**: Client makes a request to `/invoke` with the `create_content_with_hitl` function.
+1. **Initial Request**: Client makes a request to `/kickoff` with the `ContentCreationCrew` crew.
 
-2. **Background Processing**: The system processes the request asynchronously.
+2. **Background Processing**: The system processes the request asynchronously using CrewAI's crew framework.
 
 3. **Pending Approval**: When content is ready for review, the job status changes to `pending_approval`.
 
@@ -135,18 +149,18 @@ curl "http://localhost:8888/jobs"
 
 6. **Feedback Processing**:
    - If approved, the job is marked as completed.
-   - If not approved, the content is regenerated with the feedback.
+   - If not approved, the content is regenerated with the feedback using a specialized crew.
 
 7. **Final Result**: The final content is available through the job status endpoint and a completion webhook is sent.
 
 ## Project Structure
 
-- `orchestrator_service.py`: Contains the main content creation functions
+- `orchestrator_service.py`: Contains the CrewAI implementation with agents, tasks, and crews
 - `api_wrapper.py`: FastAPI wrapper that provides the API endpoints and job management
 - `hitl_test_client.py`: Test client for the HITL workflow
 - `webhook_receiver.py`: Simple webhook receiver for testing
-- `agents/`: Directory containing the agent definitions
-- `tasks/`: Directory containing the task definitions
+
+The project follows CrewAI's recommended structure using the `@CrewBase` decorator along with `@agent`, `@task`, and `@crew` annotations to define the content creation workflow.
 
 ## Using Webhooks
 
@@ -157,9 +171,10 @@ Webhooks allow your application to receive real-time notifications about job sta
 3. Process the webhook data according to the job status.
 
 Webhook payloads include:
+
 - `job_id`: The ID of the job
 - `status`: The current status (e.g., `pending_approval`, `completed`, `error`)
-- `function`: The function that was called
+- `crew`: The crew that was called
 - `result`: The result data (for completed jobs)
 
 ## Docker Deployment
@@ -169,4 +184,4 @@ Build and run the Docker container:
 ```bash
 docker build -t crewai-hitl .
 docker run -p 8888:8888 -v $(pwd)/.streamlit:/app/.streamlit crewai-hitl
-``` 
+```

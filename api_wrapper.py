@@ -17,9 +17,9 @@ from fastapi.responses import JSONResponse
 
 # Set a longer timeout for the app to handle long-running operations
 app = FastAPI(
-    title="Content Orchestrator",
+    title="CrewAI Content Orchestrator",
     # Note: When running with uvicorn, use the following command line options:
-    # --timeout-keep-alive 300 --timeout-notify 300 --timeout-graceful-shutdown 300
+    # --timeout-keep-alive 300 --timeout-graceful-shutdown 300
 )
 
 # Add CORS middleware with security settings
@@ -74,25 +74,39 @@ except Exception as e:
 
 def process_job_in_background(
     job_id: str,
-    function_name: str,
-    args: list,
-    kwargs: dict,
+    crew_name: str,
+    inputs: dict,
     webhook_url: Optional[str] = None,
 ):
     """
-    Process a job in the background and update its status
+    Process a crew job in the background and update its status
     """
     try:
-        logger.info(f"Starting background job {job_id} for function {function_name}")
+        logger.info(f"Starting background job {job_id} for crew {crew_name}")
 
         # Update job status to processing
         jobs[job_id]["status"] = "processing"
 
-        # Get the function from the user module
-        func = getattr(user_module, function_name)
+        # Get the crew instance from the user module
+        crew_class = getattr(user_module, crew_name)
+        crew_instance = crew_class()
+        
+        # Get the crew method
+        if hasattr(crew_instance, crew_name):
+            # If the crew has a method with the same name (e.g., content_crew)
+            crew_method = getattr(crew_instance, crew_name)()
+        else:
+            # Otherwise, use the first crew method found
+            crew_methods = [method for method in dir(crew_instance) 
+                           if not method.startswith('_') and 
+                           callable(getattr(crew_instance, method)) and
+                           method not in ['kickoff']]
+            if not crew_methods:
+                raise ValueError(f"No crew methods found in {crew_name}")
+            crew_method = getattr(crew_instance, crew_methods[0])()
 
-        # Execute the function
-        result = func(*args, **kwargs)
+        # Execute the crew
+        result = crew_method.kickoff(inputs=inputs)
 
         # Check if the result indicates human approval is needed
         if isinstance(result, dict) and result.get("status") == "needs_approval":
@@ -101,9 +115,8 @@ def process_job_in_background(
                 **jobs[job_id],
                 "status": "pending_approval",
                 "result": result,
-                "retry_function": function_name,  # Store function for retry
-                "retry_args": args,
-                "retry_kwargs": kwargs,
+                "retry_crew": crew_name,  # Store crew for retry
+                "retry_inputs": inputs,
             }
             
             logger.info(f"Job {job_id} waiting for human approval")
@@ -114,7 +127,7 @@ def process_job_in_background(
                     webhook_payload = {
                         "job_id": job_id,
                         "status": "pending_approval",
-                        "function": function_name,
+                        "crew": crew_name,
                         "result": result,
                     }
 
@@ -146,7 +159,7 @@ def process_job_in_background(
                     webhook_payload = {
                         "job_id": job_id,
                         "status": "completed",
-                        "function": function_name,
+                        "crew": crew_name,
                         "completed_at": jobs[job_id]["completed_at"],
                         "result": result,
                     }
@@ -181,7 +194,7 @@ def process_job_in_background(
                 webhook_payload = {
                     "job_id": job_id,
                     "status": "error",
-                    "function": function_name,
+                    "crew": crew_name,
                     "error_at": jobs[job_id]["error_at"],
                     "error": str(e),
                     "error_type": e.__class__.__name__,
@@ -221,23 +234,23 @@ async def health_check():
     }
 
 
-@app.post("/invoke")
-async def invoke_function(request: Request, background_tasks: BackgroundTasks):
+@app.post("/kickoff")
+async def kickoff_crew(request: Request, background_tasks: BackgroundTasks):
     """
-    Invoke a function asynchronously and return a job ID
+    Kickoff a crew asynchronously and return a job ID
     """
     try:
         data = await request.json()
-        function_name = data.get("function")
-        args = data.get("args", [])
-        kwargs = data.get("kwargs", {})
+        crew_name = data.get("crew", "ContentCreationCrew")
+        inputs = data.get("inputs", {})
         webhook_url = data.get("webhook_url")
         wait = data.get("wait", False)  # Option to wait for completion
 
-        if not hasattr(user_module, function_name):
+        # Check if the crew exists in the user module
+        if not hasattr(user_module, crew_name):
             return JSONResponse(
                 status_code=404,
-                content={"error": f"Function {function_name} not found"},
+                content={"error": f"Crew {crew_name} not found"},
             )
 
         # Generate a unique job ID
@@ -246,21 +259,34 @@ async def invoke_function(request: Request, background_tasks: BackgroundTasks):
         # Initialize job in the jobs dictionary
         jobs[job_id] = {
             "id": job_id,
-            "function": function_name,
-            "args": args,
-            "kwargs": kwargs,
+            "crew": crew_name,
+            "inputs": inputs,
             "status": "queued",
             "created_at": datetime.now().isoformat(),
             "webhook_url": webhook_url,
         }
 
-        logger.info(f"Created job {job_id} for function {function_name}")
+        logger.info(f"Created job {job_id} for crew {crew_name}")
 
         if wait:
             # Synchronous execution - wait for result
             try:
-                func = getattr(user_module, function_name)
-                result = func(*args, **kwargs)
+                crew_class = getattr(user_module, crew_name)
+                crew_instance = crew_class()
+                
+                # Get the crew method
+                if hasattr(crew_instance, crew_name):
+                    crew_method = getattr(crew_instance, crew_name)()
+                else:
+                    crew_methods = [method for method in dir(crew_instance) 
+                                   if not method.startswith('_') and 
+                                   callable(getattr(crew_instance, method)) and
+                                   method not in ['kickoff']]
+                    if not crew_methods:
+                        raise ValueError(f"No crew methods found in {crew_name}")
+                    crew_method = getattr(crew_instance, crew_methods[0])()
+                
+                result = crew_method.kickoff(inputs=inputs)
 
                 # Update job with success result
                 jobs[job_id] = {
@@ -290,20 +316,19 @@ async def invoke_function(request: Request, background_tasks: BackgroundTasks):
             background_tasks.add_task(
                 process_job_in_background,
                 job_id,
-                function_name,
-                args,
-                kwargs,
+                crew_name,
+                inputs,
                 webhook_url,
             )
 
             return {
                 "job_id": job_id,
                 "status": "queued",
-                "message": "Function execution started in the background",
+                "message": "Crew kickoff started in the background",
             }
 
     except Exception as e:
-        logger.error(f"Error setting up function invocation: {str(e)}")
+        logger.error(f"Error setting up crew kickoff: {str(e)}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
@@ -383,64 +408,29 @@ async def provide_feedback(
             }
         else:
             # If not approved, restart the job with feedback
-            # Get the original function and arguments
-            retry_function = jobs[job_id].get("retry_function")
-            retry_args = jobs[job_id].get("retry_args", [])
-            retry_kwargs = jobs[job_id].get("retry_kwargs", {}).copy()  # Make a copy to avoid modifying the original
+            # Get the original crew and inputs
+            retry_crew = jobs[job_id].get("retry_crew")
+            retry_inputs = jobs[job_id].get("retry_inputs", {}).copy()  # Make a copy to avoid modifying the original
             
-            # Special handling for create_content_with_hitl
-            if retry_function == "create_content_with_hitl":
-                # Add feedback to kwargs
-                retry_kwargs["feedback"] = feedback
-                
-                # Update job status to processing again
-                jobs[job_id]["status"] = "processing"
-                
-                # Start retry in background
-                background_tasks.add_task(
-                    process_job_in_background,
-                    job_id,
-                    retry_function,
-                    retry_args,
-                    retry_kwargs,
-                    webhook_url,
-                )
-                
-                return {
-                    "message": "Feedback recorded and content generation restarted with feedback",
-                    "job_id": job_id,
-                }
-            else:
-                # No specific HITL handling for this function
-                jobs[job_id]["status"] = "rejected"
-                
-                # Send webhook notification if URL is provided
-                if webhook_url:
-                    try:
-                        webhook_payload = {
-                            "job_id": job_id,
-                            "status": "rejected",
-                            "feedback": feedback,
-                            "approved": False,
-                            "rejected_at": datetime.now().isoformat(),
-                        }
-
-                        requests.post(
-                            webhook_url,
-                            json=webhook_payload,
-                            headers={"Content-Type": "application/json"},
-                            timeout=10,
-                        )
-                        logger.info(f"Rejection webhook notification sent for job {job_id}")
-                    except Exception as webhook_error:
-                        logger.error(
-                            f"Failed to send rejection webhook notification for job {job_id}: {str(webhook_error)}"
-                        )
-                
-                return {
-                    "message": "Feedback recorded and job marked as rejected",
-                    "job_id": job_id,
-                }
+            # Add feedback to inputs
+            retry_inputs["feedback"] = feedback
+            
+            # Update job status to processing again
+            jobs[job_id]["status"] = "processing"
+            
+            # Start retry in background
+            background_tasks.add_task(
+                process_job_in_background,
+                job_id,
+                retry_crew,
+                retry_inputs,
+                webhook_url,
+            )
+            
+            return {
+                "message": "Feedback recorded and content generation restarted with feedback",
+                "job_id": job_id,
+            }
 
     except Exception as e:
         logger.error(f"Error processing feedback for job {job_id}: {str(e)}")
@@ -457,7 +447,7 @@ async def list_jobs(limit: int = 10, status: Optional[str] = None):
             # Create a copy without potentially large result data
             job_summary = {
                 "id": job_id,
-                "function": job_data.get("function"),
+                "crew": job_data.get("crew"),
                 "status": job_data.get("status"),
                 "created_at": job_data.get("created_at"),
                 "completed_at": job_data.get("completed_at", None),
@@ -487,16 +477,62 @@ async def delete_job(job_id: str):
     return {"message": f"Job {job_id} deleted successfully"}
 
 
-@app.get("/list-functions")
-async def list_functions():
-    """List available functions in the user module"""
+@app.get("/list-crews")
+async def list_crews():
+    """List available crews in the user module"""
     try:
-        functions = [
-            name
-            for name, obj in vars(user_module).items()
-            if callable(obj) and not name.startswith("_")
-        ]
-        return {"functions": functions}
+        crews = []
+        for name, obj in vars(user_module).items():
+            if callable(obj) and not name.startswith("_"):
+                if hasattr(obj, "__annotations__") and "return" in obj.__annotations__:
+                    return_type = obj.__annotations__["return"]
+                    if hasattr(return_type, "__name__") and return_type.__name__ == "Dict":
+                        crews.append(name)
+                    
+        # Also look for classes with @CrewBase decorator
+        for name, obj in vars(user_module).items():
+            if isinstance(obj, type) and hasattr(obj, "__module__") and obj.__module__ == user_module.__name__:
+                crews.append(name)
+                
+        return {"crews": crews}
     except Exception as e:
-        logger.error(f"Error listing functions: {str(e)}")
+        logger.error(f"Error listing crews: {str(e)}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+# For backward compatibility - will be removed in future versions
+@app.post("/invoke")
+async def invoke_function(request: Request, background_tasks: BackgroundTasks):
+    """
+    Legacy endpoint for backward compatibility - redirects to /kickoff
+    """
+    try:
+        data = await request.json()
+        function_name = data.get("function")
+        args = data.get("args", [])
+        kwargs = data.get("kwargs", {})
+        
+        # Convert to new format
+        new_data = {
+            "crew": "ContentCreationCrew",
+            "inputs": {}
+        }
+        
+        # Handle specific functions
+        if function_name == "create_content_with_hitl":
+            if args and len(args) > 0:
+                new_data["inputs"]["topic"] = args[0]
+            if kwargs.get("feedback"):
+                new_data["inputs"]["feedback"] = kwargs["feedback"]
+        
+        # Copy webhook_url and wait if present
+        if "webhook_url" in data:
+            new_data["webhook_url"] = data["webhook_url"]
+        if "wait" in data:
+            new_data["wait"] = data["wait"]
+            
+        # Forward to kickoff endpoint
+        return await kickoff_crew(request, background_tasks)
+        
+    except Exception as e:
+        logger.error(f"Error in legacy invoke endpoint: {str(e)}")
         return JSONResponse(status_code=500, content={"error": str(e)})

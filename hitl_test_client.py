@@ -18,9 +18,10 @@ async def test_hitl_workflow(server_url, topic, approve=False, feedback=None, we
     async with aiohttp.ClientSession() as session:
         # Step 1: Start a content creation job with HITL
         data = {
-            "function": "create_content_with_hitl",
-            "args": [topic],
-            "kwargs": {}
+            "crew": "ContentCreationCrew",
+            "inputs": {
+                "topic": topic
+            }
         }
         
         # Add webhook URL if provided
@@ -30,7 +31,7 @@ async def test_hitl_workflow(server_url, topic, approve=False, feedback=None, we
         print(f"\n=== Starting Content Creation with HITL for topic: {topic} ===")
         print("Sending request...")
         
-        async with session.post(f'{server_url}/invoke', json=data) as response:
+        async with session.post(f'{server_url}/kickoff', json=data) as response:
             result = await response.json()
             print("\nJob started:")
             print(json.dumps(result, indent=2))
@@ -50,7 +51,7 @@ async def test_hitl_workflow(server_url, topic, approve=False, feedback=None, we
             return
         
         # Step 3: Display the content for review
-        content = job_status.get("result", {}).get("result", {}).get("content", "")
+        content = job_status.get("result", {}).get("content", "")
         print("\n=== Content Ready for Review ===")
         print("-" * 80)
         print(content[:500] + "..." if len(content) > 500 else content)
