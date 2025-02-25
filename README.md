@@ -2,6 +2,21 @@
 
 This project demonstrates how to use CrewAI with Human-in-the-Loop (HITL) capabilities for content generation. The system allows for asynchronous content creation with human feedback integration.
 
+## What We've Done
+
+We've implemented a content generation system using CrewAI's recommended patterns:
+
+1. Created a `ContentCreationCrew` class with the `@CrewBase` decorator
+2. Defined agents using the `@agent` decorator for research, writing, and editing
+3. Defined tasks using the `@task` decorator with proper input handling
+4. Defined crews using the `@crew` decorator for sequential processing
+5. Implemented a FastAPI wrapper (`api_wrapper.py`) for asynchronous job processing
+6. Added HITL functionality to allow human feedback on generated content
+7. Created webhook notifications for real-time status updates
+8. Unified client interface in a single `api_client.py` file
+
+The application now follows CrewAI's recommended structure and terminology, making it more maintainable and aligned with best practices.
+
 ## Setup
 
 1. Create and activate a virtual environment:
@@ -31,55 +46,52 @@ This project demonstrates how to use CrewAI with Human-in-the-Loop (HITL) capabi
    source .venv/bin/activate
    export DATA_APP_ENTRYPOINT="orchestrator_service.py"
    uvicorn api_wrapper:app --host 0.0.0.0 --port 8888 \
-     --proxy-headers --forwarded-allow-ips "*" \
      --timeout-keep-alive 300 \
-     --timeout-graceful-shutdown 300 --loop asyncio \
-     --workers 1 --limit-concurrency 1000 \
-     --backlog 2048 --no-server-header --no-date-header
+     --timeout-graceful-shutdown 300 --loop asyncio
    ```
 
-2. Start the webhook receiver for testing (in a separate terminal):
+2. (Optional) Start the webhook receiver for HITL workflows:
 
    ```bash
    source .venv/bin/activate
-   python webhook_receiver.py --port 8889
+   python webhook_receiver.py --host 0.0.0.0 --port 8889
    ```
 
-## Testing the HITL Workflow
+## Using the Unified Client
 
-You can test the HITL workflow using the provided test client:
+The `api_client.py` script provides a unified interface for interacting with the API wrapper. It supports both direct content generation and Human-in-the-Loop (HITL) workflows.
+
+### Direct Content Generation
+
+For direct content generation without human approval:
 
 ```bash
-# Activate the virtual environment
-source .venv/bin/activate
-
-# Start a job and provide feedback (default behavior)
-python hitl_test_client.py --topic "Climate Change Solutions" --webhook-url "http://localhost:8889/webhook"
-
-# Start a job and approve the content without feedback
-python hitl_test_client.py --topic "Space Exploration" --approve --webhook-url "http://localhost:8889/webhook"
-
-# Start a job with custom feedback
-python hitl_test_client.py --topic "Quantum Computing" --feedback "Please focus more on practical applications and less on theory." --webhook-url "http://localhost:8889/webhook"
+python api_client.py --topic "Artificial Intelligence" --mode direct --wait
 ```
 
-### What to Expect During Testing
+This will generate content on the specified topic and wait for the result.
 
-When you run the test client, you'll see:
+### Human-in-the-Loop (HITL) Workflow
 
-1. The job being created and queued
-2. Status updates as the job is processed
-3. The initial content when it's ready for review
-4. Feedback being submitted (or approval)
-5. If feedback was provided, status updates as the content is revised
-6. The final revised content
+For content generation with human approval:
 
-The webhook receiver will display notifications at key points in the process:
+```bash
+python api_client.py --topic "Quantum Computing" --mode hitl --webhook http://localhost:8889/webhook
+```
 
-- When content is ready for human review
-- When the job is completed after feedback
+This will start a content generation job and send webhook notifications when the content is ready for review.
 
-You can view all received webhooks by visiting <http://localhost:8889/> in your browser.
+When the content is ready, you can either approve it or provide feedback:
+
+```bash
+# To approve the content
+python api_client.py --job-id "your-job-id" --approve
+
+# To provide feedback
+python api_client.py --job-id "your-job-id" --feedback "Please add more examples of practical applications"
+```
+
+For detailed information about the HITL workflow, see [HITL_WORKFLOW.md](HITL_WORKFLOW.md).
 
 ## API Endpoints
 
@@ -91,7 +103,8 @@ curl -X POST "http://localhost:8888/kickoff" \
   -d '{
     "crew": "ContentCreationCrew",
     "inputs": {
-      "topic": "Your Topic Here"
+      "topic": "Your Topic Here",
+      "require_approval": false  # Optional, defaults to true
     },
     "webhook_url": "http://localhost:8889/webhook"
   }'
@@ -123,59 +136,138 @@ curl -X POST "http://localhost:8888/job/{job_id}/feedback" \
   }'
 ```
 
-### Listing All Jobs
+## How the Application Works
 
-```bash
-curl "http://localhost:8888/jobs"
-```
+### Core Components
 
-### Listing Available Crews
+1. **`orchestrator_service.py`**: Contains the CrewAI implementation with:
+   - Agent definitions for research, writing, and editing
+   - Task definitions with proper input handling
+   - Crew definitions for sequential processing
+   - API-compatible functions for HITL workflow
 
-```bash
-curl "http://localhost:8888/list-crews"
-```
+2. **`api_wrapper.py`**: FastAPI wrapper that provides:
+   - Asynchronous job processing
+   - Job status tracking
+   - Webhook notifications
+   - Feedback handling
 
-## How the HITL Workflow Works
+3. **`api_client.py`**: Unified client interface that provides:
+   - Direct content generation without human approval
+   - Human-in-the-Loop workflow with feedback
+   - Synchronous and asynchronous operation modes
+   - Command-line interface with various options
 
-1. **Initial Request**: Client makes a request to `/kickoff` with the `ContentCreationCrew` crew.
+4. **`webhook_receiver.py`**: Simple webhook receiver for testing
 
-2. **Background Processing**: The system processes the request asynchronously using CrewAI's crew framework.
+### Workflow
 
-3. **Pending Approval**: When content is ready for review, the job status changes to `pending_approval`.
+1. Client sends a request to `/kickoff` with a topic
+2. The system processes the request asynchronously
+3. If `require_approval` is `true` (default):
+   - When content is ready, the job status changes to "pending_approval"
+   - A webhook notification is sent (if configured)
+   - Human reviews the content and provides feedback
+   - If approved, the job is marked as completed
+   - If not approved, the content is regenerated with the feedback
+4. If `require_approval` is `false`:
+   - When content is ready, the job status changes to "completed"
+   - A webhook notification is sent (if configured)
+   - No human review is required
+5. Final content is available through the job status endpoint
 
-4. **Webhook Notification**: If a webhook URL was provided, a notification is sent with the content for review.
+## Understanding Client Options
 
-5. **Human Review**: A human reviews the content and provides feedback.
+The unified client (`api_client.py`) provides several options to control how content is generated:
 
-6. **Feedback Processing**:
-   - If approved, the job is marked as completed.
-   - If not approved, the content is regenerated with the feedback using a specialized crew.
+### Mode Options
 
-7. **Final Result**: The final content is available through the job status endpoint and a completion webhook is sent.
+- **`--mode direct`**: Generate content without human approval
+- **`--mode hitl`**: Generate content with human review and feedback
+
+### Processing Options
+
+- **`--wait`**: Wait for completion instead of polling (direct mode only)
+- **`--async`**: Use asynchronous processing for better performance (hitl mode only)
+
+### HITL Options
+
+- **`--approve`**: Automatically approve content without providing feedback
+- **`--feedback TEXT`**: Provide specific feedback for content revision
+
+### Other Options
+
+- **`--topic TEXT`**: Specify the content topic (required)
+- **`--url TEXT`**: API endpoint URL (defaults to localhost:8888)
+- **`--webhook TEXT`**: URL for webhook notifications
 
 ## Project Structure
 
-- `orchestrator_service.py`: Contains the CrewAI implementation with agents, tasks, and crews
-- `api_wrapper.py`: FastAPI wrapper that provides the API endpoints and job management
-- `hitl_test_client.py`: Test client for the HITL workflow
-- `webhook_receiver.py`: Simple webhook receiver for testing
+```
+crewai_demo/
+├── .env                    # Environment variables
+├── .env.sample             # Sample environment variables
+├── .streamlit/             # Streamlit configuration
+│   └── secrets.toml        # API keys and secrets
+├── agents/                 # Agent definitions
+├── api_client.py           # Unified client interface
+├── api_wrapper.py          # FastAPI wrapper for CrewAI
+├── HITL_IMPLEMENTATION.md  # HITL implementation details
+├── orchestrator_service.py # CrewAI implementation
+├── README.md               # This file
+├── requirements.txt        # Python dependencies
+├── tasks/                  # Task definitions
+└── webhook_receiver.py     # Simple webhook receiver for testing
+```
 
-The project follows CrewAI's recommended structure using the `@CrewBase` decorator along with `@agent`, `@task`, and `@crew` annotations to define the content creation workflow.
+## Current Issues and TODO
 
-## Using Webhooks
+### Current Issues
 
-Webhooks allow your application to receive real-time notifications about job status changes. To use webhooks:
+We're currently facing an error when running the application:
 
-1. Provide a `webhook_url` parameter when starting a job.
-2. Set up an endpoint in your application to receive POST requests.
-3. Process the webhook data according to the job status.
+```
+'function' object has no attribute 'get'
+```
 
-Webhook payloads include:
+This error occurs in the `process_job_in_background` function in `api_wrapper.py` when trying to process the result from `crew.kickoff()`.
 
-- `job_id`: The ID of the job
-- `status`: The current status (e.g., `pending_approval`, `completed`, `error`)
-- `crew`: The crew that was called
-- `result`: The result data (for completed jobs)
+### What We've Tried
+
+1. Updated the `process_job_in_background` function to handle different result types:
+   - Added conversion of TaskOutput objects to dictionaries
+   - Added handling for string results
+   - Added proper error handling
+
+2. Updated the `create_content_with_hitl` function to use the crew's `kickoff` method correctly:
+   - Simplified the input handling
+   - Removed manual task input setting
+   - Used the `kickoff(inputs=inputs)` pattern as recommended in the CrewAI docs
+
+3. Updated task methods to properly handle inputs:
+   - Added `inputs = inputs or {}` pattern to all task methods
+   - Used `inputs.get()` to extract values with defaults
+   - Added the `human_input` parameter as per the CrewAI docs
+
+### Next Steps
+
+1. Debug the `'function' object has no attribute 'get'` error:
+   - Add more detailed logging to identify exactly where the error occurs
+   - Check if the crew methods are being called correctly
+   - Verify that the inputs are being passed correctly to the tasks
+
+2. Consider creating YAML configuration files for agents and tasks as recommended in the CrewAI docs:
+   - Create `config/agents.yaml` and `config/tasks.yaml`
+   - Update the code to use these configuration files
+
+3. Implement proper error handling for missing configuration files:
+   - Add fallback mechanisms when configuration files are not found
+   - Provide clear error messages for missing configurations
+
+4. Add comprehensive testing:
+   - Create unit tests for the core functionality
+   - Add integration tests for the API endpoints
+   - Test the HITL workflow end-to-end
 
 ## Docker Deployment
 

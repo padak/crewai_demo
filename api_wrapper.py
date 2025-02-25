@@ -60,7 +60,17 @@ except Exception as e:
     logger.warning(f"Could not load secrets: {e}")
 
 # Import the user's script
-script_path = os.getenv("DATA_APP_ENTRYPOINT", "user_script.py")
+script_path = os.getenv("DATA_APP_ENTRYPOINT")
+if not script_path:
+    logger.error("DATA_APP_ENTRYPOINT environment variable is not set")
+    sys.exit(1)
+
+# Check if the script file exists
+if not os.path.exists(script_path):
+    logger.error(f"Script file not found: {script_path}")
+    logger.error(f"Please make sure the file exists and DATA_APP_ENTRYPOINT is set correctly")
+    sys.exit(1)
+
 try:
     spec = importlib.util.spec_from_file_location("user_script", script_path)
     user_module = importlib.util.module_from_spec(spec)
@@ -87,40 +97,197 @@ def process_job_in_background(
         # Update job status to processing
         jobs[job_id]["status"] = "processing"
 
+        # Check if require_approval is specified in inputs
+        require_approval = inputs.pop("require_approval", True)
+        logger.info(f"Require approval: {require_approval}")
+
         # Get the crew instance from the user module
         crew_class = getattr(user_module, crew_name)
         crew_instance = crew_class()
-        
-        # Get the crew method
-        if hasattr(crew_instance, crew_name):
-            # If the crew has a method with the same name (e.g., content_crew)
-            crew_method = getattr(crew_instance, crew_name)()
+        logger.info(f"Created crew instance of type: {type(crew_instance).__name__}")
+
+        # For CrewBase classes, we need to find a method that returns a Crew object
+        # These are typically decorated with @crew
+        crew_methods = []
+        for method_name in dir(crew_instance):
+            if not method_name.startswith("_") and callable(
+                getattr(crew_instance, method_name)
+            ):
+                method = getattr(crew_instance, method_name)
+                # Check if this is a crew method (has a __crew__ attribute or returns a Crew)
+                if hasattr(method, "__crew__"):
+                    crew_methods.append(method_name)
+                    logger.info(
+                        f"Found crew method with __crew__ attribute: {method_name}"
+                    )
+                elif (
+                    hasattr(method, "__annotations__")
+                    and "return" in method.__annotations__
+                    and method.__annotations__["return"] is not None
+                    and hasattr(method.__annotations__["return"], "__name__")
+                    and method.__annotations__["return"].__name__ == "Crew"
+                ):
+                    crew_methods.append(method_name)
+                    logger.info(
+                        f"Found crew method with Crew return annotation: {method_name}"
+                    )
+
+        if not crew_methods:
+            # If no crew methods found, try to use create_content_with_hitl directly
+            if hasattr(user_module, "create_content_with_hitl"):
+                logger.info(
+                    "No crew methods found, using create_content_with_hitl directly"
+                )
+
+                # Add require_approval back to inputs for create_content_with_hitl
+                inputs_with_approval = inputs.copy()
+                inputs_with_approval["require_approval"] = require_approval
+
+                # Call create_content_with_hitl directly
+                result = user_module.create_content_with_hitl(
+                    topic=inputs.get("topic", "General Knowledge"),
+                    feedback=inputs.get("feedback"),
+                    require_approval=require_approval,
+                )
+
+                # Convert result to a dictionary if it's not already
+                if not isinstance(result, dict):
+                    result_dict = {"content": str(result), "length": len(str(result))}
+                else:
+                    result_dict = result
+
+                # Check if the result indicates human approval is needed and require_approval is True
+                if require_approval and result_dict.get("status") == "needs_approval":
+                    # Update job status to waiting for human input
+                    jobs[job_id] = {
+                        **jobs[job_id],
+                        "status": "pending_approval",
+                        "result": result_dict,
+                        "retry_crew": crew_name,  # Store crew for retry
+                        "retry_inputs": inputs,
+                    }
+
+                    logger.info(f"Job {job_id} waiting for human approval")
+
+                    # Send webhook notification if URL is provided
+                    if webhook_url:
+                        try:
+                            webhook_payload = {
+                                "job_id": job_id,
+                                "status": "pending_approval",
+                                "crew": crew_name,
+                                "result": result_dict,
+                            }
+
+                            requests.post(
+                                webhook_url,
+                                json=webhook_payload,
+                                headers={"Content-Type": "application/json"},
+                                timeout=10,
+                            )
+                            logger.info(
+                                f"Webhook notification sent for job {job_id} pending approval"
+                            )
+                        except Exception as webhook_error:
+                            logger.error(
+                                f"Failed to send webhook notification for job {job_id}: {str(webhook_error)}"
+                            )
+                else:
+                    # Update job with success result
+                    jobs[job_id] = {
+                        **jobs[job_id],
+                        "status": "completed",
+                        "completed_at": datetime.now().isoformat(),
+                        "result": result_dict,
+                    }
+
+                    logger.info(f"Job {job_id} completed successfully")
+
+                    # Send webhook notification if URL is provided
+                    if webhook_url:
+                        try:
+                            webhook_payload = {
+                                "job_id": job_id,
+                                "status": "completed",
+                                "crew": crew_name,
+                                "completed_at": jobs[job_id]["completed_at"],
+                                "result": result_dict,
+                            }
+
+                            requests.post(
+                                webhook_url,
+                                json=webhook_payload,
+                                headers={"Content-Type": "application/json"},
+                                timeout=10,
+                            )
+                            logger.info(f"Webhook notification sent for job {job_id}")
+                        except Exception as webhook_error:
+                            logger.error(
+                                f"Failed to send webhook notification for job {job_id}: {str(webhook_error)}"
+                            )
+
+                return
+            else:
+                raise ValueError(
+                    f"No crew methods found in {crew_name} and no create_content_with_hitl function available"
+                )
+
+        # Choose the appropriate crew method based on inputs
+        if "feedback" in inputs and "content_crew_with_feedback" in crew_methods:
+            crew_method_name = "content_crew_with_feedback"
         else:
-            # Otherwise, use the first crew method found
-            crew_methods = [method for method in dir(crew_instance) 
-                           if not method.startswith('_') and 
-                           callable(getattr(crew_instance, method)) and
-                           method not in ['kickoff']]
-            if not crew_methods:
-                raise ValueError(f"No crew methods found in {crew_name}")
-            crew_method = getattr(crew_instance, crew_methods[0])()
+            crew_method_name = crew_methods[0]  # Default to first crew method
 
-        # Execute the crew
-        result = crew_method.kickoff(inputs=inputs)
+        logger.info(f"Using crew method: {crew_method_name}")
 
-        # Check if the result indicates human approval is needed
-        if isinstance(result, dict) and result.get("status") == "needs_approval":
+        # Get the crew method
+        crew_method = getattr(crew_instance, crew_method_name)
+        logger.info(f"Crew method type: {type(crew_method).__name__}")
+
+        # First call the crew method to get the Crew object
+        logger.info(f"Calling crew method to get crew object")
+        crew_object = crew_method()
+
+        if crew_object is None:
+            raise ValueError(
+                f"Crew method {crew_method_name} returned None instead of a Crew object"
+            )
+
+        logger.info(f"Crew object type: {type(crew_object).__name__}")
+
+        # Now call kickoff on the crew object
+        logger.info(f"Calling kickoff with inputs: {inputs}")
+        result = crew_object.kickoff(inputs=inputs)
+        logger.info(f"Kickoff result type: {type(result).__name__}")
+
+        # Convert result to a dictionary if it's a TaskOutput object
+        result_dict = {}
+        if hasattr(result, "raw"):
+            content = str(result.raw)
+            result_dict = {"content": content, "length": len(content)}
+        elif isinstance(result, dict):
+            result_dict = result
+        else:
+            content = str(result)
+            result_dict = {"content": content, "length": len(content)}
+
+        # Check if the result indicates human approval is needed and require_approval is True
+        if (
+            require_approval
+            and isinstance(result_dict, dict)
+            and result_dict.get("status") == "needs_approval"
+        ):
             # Update job status to waiting for human input
             jobs[job_id] = {
                 **jobs[job_id],
                 "status": "pending_approval",
-                "result": result,
+                "result": result_dict,
                 "retry_crew": crew_name,  # Store crew for retry
                 "retry_inputs": inputs,
             }
-            
+
             logger.info(f"Job {job_id} waiting for human approval")
-            
+
             # Send webhook notification if URL is provided
             if webhook_url:
                 try:
@@ -128,7 +295,7 @@ def process_job_in_background(
                         "job_id": job_id,
                         "status": "pending_approval",
                         "crew": crew_name,
-                        "result": result,
+                        "result": result_dict,
                     }
 
                     requests.post(
@@ -137,7 +304,9 @@ def process_job_in_background(
                         headers={"Content-Type": "application/json"},
                         timeout=10,
                     )
-                    logger.info(f"Webhook notification sent for job {job_id} pending approval")
+                    logger.info(
+                        f"Webhook notification sent for job {job_id} pending approval"
+                    )
                 except Exception as webhook_error:
                     logger.error(
                         f"Failed to send webhook notification for job {job_id}: {str(webhook_error)}"
@@ -148,7 +317,7 @@ def process_job_in_background(
                 **jobs[job_id],
                 "status": "completed",
                 "completed_at": datetime.now().isoformat(),
-                "result": result,
+                "result": result_dict,
             }
 
             logger.info(f"Job {job_id} completed successfully")
@@ -161,7 +330,7 @@ def process_job_in_background(
                         "status": "completed",
                         "crew": crew_name,
                         "completed_at": jobs[job_id]["completed_at"],
-                        "result": result,
+                        "result": result_dict,
                     }
 
                     requests.post(
@@ -245,9 +414,18 @@ async def kickoff_crew(request: Request, background_tasks: BackgroundTasks):
         inputs = data.get("inputs", {})
         webhook_url = data.get("webhook_url")
         wait = data.get("wait", False)  # Option to wait for completion
+        require_approval = inputs.get(
+            "require_approval", True
+        )  # Get require_approval from inputs
+
+        logger.info(f"Kickoff request for crew {crew_name} with inputs: {inputs}")
+        logger.info(
+            f"Wait for completion: {wait}, Require approval: {require_approval}"
+        )
 
         # Check if the crew exists in the user module
         if not hasattr(user_module, crew_name):
+            logger.error(f"Crew {crew_name} not found in user module")
             return JSONResponse(
                 status_code=404,
                 content={"error": f"Crew {crew_name} not found"},
@@ -271,32 +449,141 @@ async def kickoff_crew(request: Request, background_tasks: BackgroundTasks):
         if wait:
             # Synchronous execution - wait for result
             try:
+                logger.info(f"Executing job {job_id} synchronously")
+
+                # Check if we should use create_content_with_hitl directly
+                if (
+                    hasattr(user_module, "create_content_with_hitl")
+                    and crew_name == "ContentCreationCrew"
+                ):
+                    logger.info(
+                        "Using create_content_with_hitl directly for synchronous execution"
+                    )
+
+                    # Call create_content_with_hitl directly
+                    result = user_module.create_content_with_hitl(
+                        topic=inputs.get("topic", "General Knowledge"),
+                        feedback=inputs.get("feedback"),
+                        require_approval=require_approval,
+                    )
+
+                    # Convert result to a dictionary if it's not already
+                    if not isinstance(result, dict):
+                        result_dict = {
+                            "content": str(result),
+                            "length": len(str(result)),
+                        }
+                    else:
+                        result_dict = result
+
+                    # Update job with success result
+                    jobs[job_id] = {
+                        **jobs[job_id],
+                        "status": "completed"
+                        if result_dict.get("status") != "needs_approval"
+                        else "pending_approval",
+                        "completed_at": datetime.now().isoformat(),
+                        "result": result_dict,
+                    }
+
+                    return {
+                        "job_id": job_id,
+                        "status": jobs[job_id]["status"],
+                        "result": result_dict,
+                    }
+
+                # Otherwise, use the crew approach
                 crew_class = getattr(user_module, crew_name)
                 crew_instance = crew_class()
-                
-                # Get the crew method
-                if hasattr(crew_instance, crew_name):
-                    crew_method = getattr(crew_instance, crew_name)()
+                logger.info(
+                    f"Created crew instance of type: {type(crew_instance).__name__}"
+                )
+
+                # For CrewBase classes, we need to find a method that returns a Crew object
+                # These are typically decorated with @crew
+                crew_methods = []
+                for method_name in dir(crew_instance):
+                    if not method_name.startswith("_") and callable(
+                        getattr(crew_instance, method_name)
+                    ):
+                        method = getattr(crew_instance, method_name)
+                        # Check if this is a crew method (has a __crew__ attribute or returns a Crew)
+                        if hasattr(method, "__crew__"):
+                            crew_methods.append(method_name)
+                            logger.info(
+                                f"Found crew method with __crew__ attribute: {method_name}"
+                            )
+                        elif (
+                            hasattr(method, "__annotations__")
+                            and "return" in method.__annotations__
+                            and method.__annotations__["return"] is not None
+                            and hasattr(method.__annotations__["return"], "__name__")
+                            and method.__annotations__["return"].__name__ == "Crew"
+                        ):
+                            crew_methods.append(method_name)
+                            logger.info(
+                                f"Found crew method with Crew return annotation: {method_name}"
+                            )
+
+                if not crew_methods:
+                    logger.error(f"No crew methods found in {crew_name}")
+                    raise ValueError(f"No crew methods found in {crew_name}")
+
+                # Choose the appropriate crew method based on inputs
+                if (
+                    "feedback" in inputs
+                    and "content_crew_with_feedback" in crew_methods
+                ):
+                    crew_method_name = "content_crew_with_feedback"
                 else:
-                    crew_methods = [method for method in dir(crew_instance) 
-                                   if not method.startswith('_') and 
-                                   callable(getattr(crew_instance, method)) and
-                                   method not in ['kickoff']]
-                    if not crew_methods:
-                        raise ValueError(f"No crew methods found in {crew_name}")
-                    crew_method = getattr(crew_instance, crew_methods[0])()
-                
-                result = crew_method.kickoff(inputs=inputs)
+                    crew_method_name = crew_methods[0]  # Default to first crew method
+
+                logger.info(f"Using crew method: {crew_method_name}")
+
+                # Get the crew method
+                crew_method = getattr(crew_instance, crew_method_name)
+                logger.info(f"Crew method type: {type(crew_method).__name__}")
+
+                # First call the crew method to get the Crew object
+                logger.info(f"Calling crew method to get crew object")
+                crew_object = crew_method()
+
+                if crew_object is None:
+                    raise ValueError(
+                        f"Crew method {crew_method_name} returned None instead of a Crew object"
+                    )
+
+                logger.info(f"Crew object type: {type(crew_object).__name__}")
+
+                # Remove require_approval from inputs before passing to kickoff
+                inputs_copy = inputs.copy()
+                inputs_copy.pop("require_approval", None)
+                logger.info(f"Calling kickoff with inputs: {inputs_copy}")
+
+                # Now call kickoff on the crew object
+                result = crew_object.kickoff(inputs=inputs_copy)
+                logger.info(f"Kickoff result type: {type(result).__name__}")
+
+                # Convert result to a dictionary if it's a TaskOutput object
+                result_dict = {}
+                if hasattr(result, "raw"):
+                    content = str(result.raw)
+                    result_dict = {"content": content, "length": len(content)}
+                elif isinstance(result, dict):
+                    result_dict = result
+                else:
+                    content = str(result)
+                    result_dict = {"content": content, "length": len(content)}
 
                 # Update job with success result
                 jobs[job_id] = {
                     **jobs[job_id],
                     "status": "completed",
                     "completed_at": datetime.now().isoformat(),
-                    "result": result,
+                    "result": result_dict,
                 }
 
-                return {"job_id": job_id, "status": "completed", "result": result}
+                return {"job_id": job_id, "status": "completed", "result": result_dict}
             except Exception as e:
                 # Update job with error information
                 jobs[job_id] = {
@@ -358,8 +645,10 @@ async def provide_feedback(
     # Check if job is in a state that can accept feedback
     if jobs[job_id].get("status") != "pending_approval":
         return JSONResponse(
-            status_code=400, 
-            content={"error": f"Job {job_id} is not in a state that can accept feedback. Current status: {jobs[job_id].get('status')}"}
+            status_code=400,
+            content={
+                "error": f"Job {job_id} is not in a state that can accept feedback. Current status: {jobs[job_id].get('status')}"
+            },
         )
 
     try:
@@ -378,7 +667,7 @@ async def provide_feedback(
         if approved:
             # If approved, mark as completed
             jobs[job_id]["status"] = "completed"
-            
+
             # Send webhook notification if URL is provided
             if webhook_url:
                 try:
@@ -401,7 +690,7 @@ async def provide_feedback(
                     logger.error(
                         f"Failed to send approval webhook notification for job {job_id}: {str(webhook_error)}"
                     )
-                    
+
             return {
                 "message": "Feedback recorded and job marked as completed",
                 "job_id": job_id,
@@ -410,14 +699,16 @@ async def provide_feedback(
             # If not approved, restart the job with feedback
             # Get the original crew and inputs
             retry_crew = jobs[job_id].get("retry_crew")
-            retry_inputs = jobs[job_id].get("retry_inputs", {}).copy()  # Make a copy to avoid modifying the original
-            
+            retry_inputs = (
+                jobs[job_id].get("retry_inputs", {}).copy()
+            )  # Make a copy to avoid modifying the original
+
             # Add feedback to inputs
             retry_inputs["feedback"] = feedback
-            
+
             # Update job status to processing again
             jobs[job_id]["status"] = "processing"
-            
+
             # Start retry in background
             background_tasks.add_task(
                 process_job_in_background,
@@ -426,7 +717,7 @@ async def provide_feedback(
                 retry_inputs,
                 webhook_url,
             )
-            
+
             return {
                 "message": "Feedback recorded and content generation restarted with feedback",
                 "job_id": job_id,
@@ -486,53 +777,23 @@ async def list_crews():
             if callable(obj) and not name.startswith("_"):
                 if hasattr(obj, "__annotations__") and "return" in obj.__annotations__:
                     return_type = obj.__annotations__["return"]
-                    if hasattr(return_type, "__name__") and return_type.__name__ == "Dict":
+                    if (
+                        return_type is not None
+                        and hasattr(return_type, "__name__")
+                        and return_type.__name__ == "Dict"
+                    ):
                         crews.append(name)
-                    
+
         # Also look for classes with @CrewBase decorator
         for name, obj in vars(user_module).items():
-            if isinstance(obj, type) and hasattr(obj, "__module__") and obj.__module__ == user_module.__name__:
+            if (
+                isinstance(obj, type)
+                and hasattr(obj, "__module__")
+                and obj.__module__ == user_module.__name__
+            ):
                 crews.append(name)
-                
+
         return {"crews": crews}
     except Exception as e:
         logger.error(f"Error listing crews: {str(e)}")
-        return JSONResponse(status_code=500, content={"error": str(e)})
-
-# For backward compatibility - will be removed in future versions
-@app.post("/invoke")
-async def invoke_function(request: Request, background_tasks: BackgroundTasks):
-    """
-    Legacy endpoint for backward compatibility - redirects to /kickoff
-    """
-    try:
-        data = await request.json()
-        function_name = data.get("function")
-        args = data.get("args", [])
-        kwargs = data.get("kwargs", {})
-        
-        # Convert to new format
-        new_data = {
-            "crew": "ContentCreationCrew",
-            "inputs": {}
-        }
-        
-        # Handle specific functions
-        if function_name == "create_content_with_hitl":
-            if args and len(args) > 0:
-                new_data["inputs"]["topic"] = args[0]
-            if kwargs.get("feedback"):
-                new_data["inputs"]["feedback"] = kwargs["feedback"]
-        
-        # Copy webhook_url and wait if present
-        if "webhook_url" in data:
-            new_data["webhook_url"] = data["webhook_url"]
-        if "wait" in data:
-            new_data["wait"] = data["wait"]
-            
-        # Forward to kickoff endpoint
-        return await kickoff_crew(request, background_tasks)
-        
-    except Exception as e:
-        logger.error(f"Error in legacy invoke endpoint: {str(e)}")
         return JSONResponse(status_code=500, content={"error": str(e)})
