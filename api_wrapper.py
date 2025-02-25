@@ -68,7 +68,9 @@ if not script_path:
 # Check if the script file exists
 if not os.path.exists(script_path):
     logger.error(f"Script file not found: {script_path}")
-    logger.error(f"Please make sure the file exists and DATA_APP_ENTRYPOINT is set correctly")
+    logger.error(
+        f"Please make sure the file exists and DATA_APP_ENTRYPOINT is set correctly"
+    )
     sys.exit(1)
 
 try:
@@ -103,8 +105,10 @@ def process_job_in_background(
 
         # Get the crew instance from the user module
         crew_class = getattr(user_module, crew_name)
-        crew_instance = crew_class()
-        logger.info(f"Created crew instance of type: {type(crew_instance).__name__}")
+        crew_instance = crew_class(inputs=inputs)
+        logger.info(
+            f"Created crew instance of type: {type(crew_instance).__name__} with inputs: {inputs}"
+        )
 
         # For CrewBase classes, we need to find a method that returns a Crew object
         # These are typically decorated with @crew
@@ -145,7 +149,7 @@ def process_job_in_background(
 
                 # Call create_content_with_hitl directly
                 result = user_module.create_content_with_hitl(
-                    topic=inputs.get("topic", "General Knowledge"),
+                    topic=inputs["topic"],
                     feedback=inputs.get("feedback"),
                     require_approval=require_approval,
                 )
@@ -256,8 +260,8 @@ def process_job_in_background(
         logger.info(f"Crew object type: {type(crew_object).__name__}")
 
         # Now call kickoff on the crew object
-        logger.info(f"Calling kickoff with inputs: {inputs}")
-        result = crew_object.kickoff(inputs=inputs)
+        logger.info(f"Calling kickoff with inputs already in crew instance")
+        result = crew_object.kickoff()
         logger.info(f"Kickoff result type: {type(result).__name__}")
 
         # Convert result to a dictionary if it's a TaskOutput object
@@ -462,7 +466,7 @@ async def kickoff_crew(request: Request, background_tasks: BackgroundTasks):
 
                     # Call create_content_with_hitl directly
                     result = user_module.create_content_with_hitl(
-                        topic=inputs.get("topic", "General Knowledge"),
+                        topic=inputs["topic"],
                         feedback=inputs.get("feedback"),
                         require_approval=require_approval,
                     )
@@ -494,9 +498,9 @@ async def kickoff_crew(request: Request, background_tasks: BackgroundTasks):
 
                 # Otherwise, use the crew approach
                 crew_class = getattr(user_module, crew_name)
-                crew_instance = crew_class()
+                crew_instance = crew_class(inputs=inputs)
                 logger.info(
-                    f"Created crew instance of type: {type(crew_instance).__name__}"
+                    f"Created crew instance of type: {type(crew_instance).__name__} with inputs: {inputs}"
                 )
 
                 # For CrewBase classes, we need to find a method that returns a Crew object
@@ -555,13 +559,8 @@ async def kickoff_crew(request: Request, background_tasks: BackgroundTasks):
 
                 logger.info(f"Crew object type: {type(crew_object).__name__}")
 
-                # Remove require_approval from inputs before passing to kickoff
-                inputs_copy = inputs.copy()
-                inputs_copy.pop("require_approval", None)
-                logger.info(f"Calling kickoff with inputs: {inputs_copy}")
-
                 # Now call kickoff on the crew object
-                result = crew_object.kickoff(inputs=inputs_copy)
+                result = crew_object.kickoff()
                 logger.info(f"Kickoff result type: {type(result).__name__}")
 
                 # Convert result to a dictionary if it's a TaskOutput object
