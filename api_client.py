@@ -55,7 +55,7 @@ def generate_content_direct(topic, api_url, wait=False, webhook_url=None):
         "wait": wait,  # Whether to wait for completion
     }
 
-    # Add webhook URL if provided
+    # Add webhook URL if explicitly provided
     if webhook_url:
         payload["webhook_url"] = webhook_url
         print(f"Webhook notifications will be sent to: {webhook_url}")
@@ -92,9 +92,6 @@ def generate_content_direct(topic, api_url, wait=False, webhook_url=None):
                     print(f"\nWebhook notifications will be sent to: {webhook_url}")
                     print("You can monitor the job status through webhook notifications.")
                     print(f"To check job status manually: {api_url}/job/{job_id}")
-                    print(f"To approve or provide feedback later, run:")
-                    print(f"  python api_client.py --job-id {job_id} --approve")
-                    print(f"  python api_client.py --job-id {job_id} --feedback \"Your feedback here\"")
                 else:
                     if (
                         result.get("status") == "queued"
@@ -102,6 +99,10 @@ def generate_content_direct(topic, api_url, wait=False, webhook_url=None):
                     ):
                         print("\nPolling for job completion...")
                         poll_until_complete(job_id, api_url)
+                
+                # Always show how to check status manually
+                if not webhook_url:
+                    print(f"\nTo check job status manually: {api_url}/job/{job_id}")
 
             return True
         else:
@@ -602,7 +603,7 @@ Examples:
         help="Wait for the result instead of polling (only for direct mode)",
     )
     parser.add_argument(
-        "--webhook", default=DEFAULT_WEBHOOK_URL, help="Webhook URL to receive notifications"
+        "--webhook", help="Webhook URL to receive notifications (default for HITL: http://localhost:8889/webhook)"
     )
     parser.add_argument(
         "--no-webhook",
@@ -630,9 +631,15 @@ Examples:
 
     args = parser.parse_args()
     
-    # Set webhook URL to None if no-webhook is specified
-    webhook_url = None if args.no_webhook else args.webhook
-
+    # Set webhook URL based on mode and arguments
+    webhook_url = None
+    if args.no_webhook:
+        webhook_url = None  # Explicitly disable webhooks
+    elif args.webhook:
+        webhook_url = args.webhook  # Use explicitly provided webhook
+    elif args.mode == "hitl":
+        webhook_url = DEFAULT_WEBHOOK_URL  # Use default webhook only for HITL mode
+    
     # Check if we're handling an existing job
     if args.job_id:
         if not (args.approve or args.feedback is not None):
