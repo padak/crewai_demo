@@ -93,6 +93,55 @@ python api_client.py --job-id "your-job-id" --feedback "Please add more examples
 
 For detailed information about the HITL workflow, see [HITL_WORKFLOW.md](HITL_WORKFLOW.md).
 
+## Remote Deployment Usage
+
+When the service is deployed remotely (e.g., on a cloud platform or server), you need to adjust your client commands to account for potential timeout issues and network constraints.
+
+### Connecting to a Remote Server
+
+Specify the remote server URL with the `--url` parameter:
+
+```bash
+python api_client.py --topic "Artificial Intelligence" --mode direct --url https://your-remote-server.com
+```
+
+### Handling Timeouts with Asynchronous Processing
+
+When working with remote deployments, **avoid using the `--wait` flag** for long-running operations as it may cause timeout errors (502 Bad Gateway). Instead, use the asynchronous approach:
+
+```bash
+# Start a job asynchronously
+python api_client.py --topic "Artificial Intelligence" --mode direct --url https://your-remote-server.com
+
+# Then check the status later using the job ID
+curl https://your-remote-server.com/job/your-job-id
+```
+
+### Example with Real Remote Deployment
+
+```bash
+# Start a content generation job
+python api_client.py --topic "Artificial Intelligence" --mode direct --url https://flask-550.hub.canary-orion.keboola.dev
+
+# The command will return a job ID, which you can use to check status
+curl https://flask-550.hub.canary-orion.keboola.dev/job/8cdec218-a0bc-44ab-b4e3-133ffa778038
+```
+
+### Setting Up a Local Webhook Receiver
+
+For remote deployments, you may need to set up a publicly accessible webhook endpoint or use a service like ngrok to expose your local webhook receiver:
+
+```bash
+# Start the webhook receiver locally
+python webhook_receiver.py --host 0.0.0.0 --port 8889
+
+# In another terminal, use ngrok to expose it
+ngrok http 8889
+
+# Then use the ngrok URL as your webhook
+python api_client.py --topic "Climate Change" --mode hitl --url https://your-remote-server.com --webhook https://your-ngrok-url.ngrok.io/webhook
+```
+
 ## API Endpoints
 
 ### Starting a Content Creation Job
