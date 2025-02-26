@@ -181,17 +181,51 @@ class ContentCreationCrew:
 
     def _get_llm(self):
         """Helper method to create a consistent LLM configuration"""
-        return ChatOpenAI(
-            model="openrouter/openai/gpt-4o-mini",
-            openai_api_key=os.environ["OPENROUTER_API_KEY"],
-            base_url="https://openrouter.ai/api/v1",
-            model_kwargs={
-                "headers": {
+        # Determine which LLM provider to use
+        llm_provider = os.environ.get("LLM_PROVIDER", "openrouter").lower()
+        
+        if llm_provider == "azure":
+            # Azure OpenAI configuration
+            api_key = os.environ.get("AZURE_OPENAI_API_KEY")
+            azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
+            api_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2023-05-15")
+            deployment_id = os.environ.get("AZURE_OPENAI_DEPLOYMENT_ID", "gpt-35-turbo-0125")
+            
+            if not api_key or not azure_endpoint:
+                raise ValueError("AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT must be set for Azure OpenAI")
+            
+            logger.info(f"Using Azure OpenAI with deployment_id: {deployment_id}")
+            
+            # For Azure OpenAI, we use the deployment_id as the model name
+            return ChatOpenAI(
+                model=deployment_id,
+                openai_api_key=api_key,
+                openai_api_version=api_version,
+                azure_endpoint=azure_endpoint,
+                azure_deployment=deployment_id,
+                temperature=0.7,
+            )
+        else:
+            # Default to OpenRouter
+            api_key = os.environ.get("OPENROUTER_API_KEY")
+            base_url = os.environ.get("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+            model = os.environ.get("OPENROUTER_MODEL", "openai/gpt-3.5-turbo")
+            
+            if not api_key:
+                raise ValueError("OPENROUTER_API_KEY must be set for OpenRouter")
+            
+            logger.info(f"Using OpenRouter with model: {model}")
+            
+            return ChatOpenAI(
+                model=model,
+                openai_api_key=api_key,
+                base_url=base_url,
+                temperature=0.7,
+                default_headers={
                     "HTTP-Referer": "https://github.com/crewai",
                     "X-Title": "CrewAI Demo",
                 }
-            },
-        )
+            )
 
 
 # API-compatible functions

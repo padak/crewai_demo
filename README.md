@@ -14,6 +14,7 @@ We've implemented a content generation system using CrewAI's recommended pattern
 6. Added HITL functionality to allow human feedback on generated content
 7. Created webhook notifications for real-time status updates
 8. Unified client interface in a single `api_client.py` file
+9. Support for both OpenRouter and Azure OpenAI as LLM providers
 
 The application now follows CrewAI's recommended structure and terminology, making it more maintainable and aligned with best practices.
 
@@ -32,10 +33,21 @@ The application now follows CrewAI's recommended structure and terminology, maki
    pip install -r requirements.txt
    ```
 
-3. Create a `.streamlit/secrets.toml` file with your OpenRouter API key:
+3. Create a `.streamlit/secrets.toml` file with your API keys:
 
+   For OpenRouter (default):
    ```toml
+   LLM_PROVIDER = "openrouter"
    OPENROUTER_API_KEY = "your-api-key-here"
+   ```
+
+   For Azure OpenAI:
+   ```toml
+   LLM_PROVIDER = "azure"
+   AZURE_OPENAI_API_KEY = "your-api-key-here"
+   AZURE_OPENAI_ENDPOINT = "https://your-resource-name.openai.azure.com/"
+   AZURE_OPENAI_API_VERSION = "2023-05-15"
+   AZURE_OPENAI_DEPLOYMENT_ID = "gpt-35-turbo-0125"
    ```
 
 ## Running the Service
@@ -325,4 +337,57 @@ Build and run the Docker container:
 ```bash
 docker build -t crewai-hitl .
 docker run -p 8888:8888 -v $(pwd)/.streamlit:/app/.streamlit crewai-hitl
+```
+
+## LLM Provider Configuration
+
+The application supports two LLM providers:
+
+### OpenRouter (Default)
+
+To use OpenRouter, set the following environment variables:
+
+```bash
+LLM_PROVIDER=openrouter
+OPENROUTER_API_KEY=your_api_key_here
+OPENAI_API_BASE=https://openrouter.ai/api/v1
+OPENROUTER_MODEL=openrouter/openai/gpt-4o-mini  # Optional, defaults to openrouter/openai/gpt-4o-mini
+```
+
+You can also customize the model by setting the `OPENROUTER_MODEL` environment variable. Available models include:
+- `openrouter/openai/gpt-4o-mini`
+- `openrouter/openai/gpt-4o`
+- `openrouter/anthropic/claude-3-opus`
+- `openrouter/anthropic/claude-3-sonnet`
+
+### Azure OpenAI
+
+To use Azure OpenAI, set the following environment variables:
+
+```bash
+LLM_PROVIDER=azure
+AZURE_OPENAI_API_KEY=your_api_key_here
+AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
+AZURE_OPENAI_API_VERSION=2023-05-15  # Optional, defaults to 2023-05-15
+AZURE_OPENAI_DEPLOYMENT_ID=gpt-35-turbo-0125  # Optional, defaults to gpt-35-turbo-0125
+```
+
+The `AZURE_OPENAI_DEPLOYMENT_ID` should match a deployment in your Azure OpenAI resource. Common deployment IDs include:
+- `gpt-35-turbo-0125` (GPT-3.5 Turbo)
+- `gpt-4-32k` (GPT-4 with 32k context window)
+
+### Sample Configuration Files
+
+The repository includes sample configuration files:
+- `.env.sample` - General configuration with OpenRouter as the default
+- `.env.azure.sample` - Configuration specifically for Azure OpenAI
+
+Copy the appropriate sample file to `.env` and update it with your API keys:
+
+```bash
+# For OpenRouter
+cp .env.sample .env
+
+# For Azure OpenAI
+cp .env.azure.sample .env
 ```
