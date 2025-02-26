@@ -109,7 +109,7 @@ For OpenRouter, you can set the following environment variables:
 
 ```bash
 LLM_PROVIDER=openrouter
-OPENROUTER_API_KEY=your-api-key
+OPENAI_API_KEY=your-api-key
 OPENAI_API_BASE=https://openrouter.ai/api/v1  # Optional, this is the default
 OPENROUTER_MODEL=openai/gpt-4o-mini  # Optional, this is the default
 ```
@@ -122,11 +122,11 @@ Note that OpenRouter model IDs follow the format `provider/model-name`, such as:
 
 ## API Key Compatibility
 
-The system now automatically sets the `OPENAI_API_KEY` environment variable to the value of `OPENROUTER_API_KEY` when using OpenRouter. This ensures compatibility with libraries like LiteLLM that expect the standard OpenAI API key to be set:
+When using OpenRouter, you only need to set the `OPENAI_API_KEY` environment variable. This ensures compatibility with libraries like LiteLLM that expect the standard OpenAI API key to be set:
 
 ```python
-# Set OPENAI_API_KEY environment variable for LiteLLM compatibility
-os.environ["OPENAI_API_KEY"] = api_key
+# Use OPENAI_API_KEY directly for compatibility with all libraries
+api_key = os.environ.get("OPENAI_API_KEY")
 ```
 
 ## Troubleshooting

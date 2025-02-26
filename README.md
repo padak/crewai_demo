@@ -10,9 +10,7 @@ The project is organized into the following components:
 crewai_demo/                  # Root project directory
 │
 ├── crewai_app/               # CrewAI application
-│   ├── orchestrator.py       # Main orchestrator for CrewAI
-│   ├── agents/               # Agent definitions
-│   ├── tasks/                # Task definitions
+│   ├── orchestrator.py       # Main orchestrator for CrewAI using @CrewBase pattern
 │   └── tests/                # Tests for CrewAI app
 │
 ├── api_wrapper/              # API wrapper service
@@ -20,8 +18,7 @@ crewai_demo/                  # Root project directory
 │   ├── api_client.py         # Client for the API
 │   └── tests/                # Tests for API service
 │
-├── shared/                   # Shared resources
-│   └── docs/                 # Documentation
+├── docs/                     # Documentation
 │
 ├── scripts/                  # Utility scripts
 │
@@ -36,9 +33,7 @@ crewai_demo/                  # Root project directory
 
 The `crewai_app` directory contains the core CrewAI application, which is responsible for content generation using AI agents. The main components are:
 
-- `orchestrator.py`: The main orchestrator that defines the CrewAI crew, agents, and tasks.
-- `agents/`: Definitions of AI agents used in the content creation process.
-- `tasks/`: Definitions of tasks that the agents perform.
+- `orchestrator.py`: The main orchestrator that defines the CrewAI crew, agents, and tasks using the `@CrewBase` decorator pattern. All CrewAI functionality is consolidated in this file.
 - `tests/`: Tests for the CrewAI application, including integration tests for different LLM providers.
 
 ### API Wrapper
@@ -51,7 +46,11 @@ The `api_wrapper` directory contains the API service that wraps the CrewAI appli
 
 ### Shared Resources
 
-The `shared` directory contains resources that are used by both the CrewAI application and the API wrapper, such as documentation.
+The `shared` directory contains resources that are used by both the CrewAI application and the API wrapper.
+
+### Documentation
+
+The project includes comprehensive documentation in the `docs/` directory.
 
 ### Scripts
 
@@ -62,17 +61,26 @@ The `scripts` directory contains utility scripts for working with the applicatio
 1. Clone the repository
 2. Install dependencies: `pip install -r requirements.txt`
 3. Copy `.env.sample` to `.env` and fill in your API keys
-4. Run the API wrapper: `uvicorn api_wrapper.api_wrapper:app --reload`
+4. Run the API wrapper: `bash scripts/run_api.sh` or `uvicorn api_wrapper.api_wrapper:app --reload`
 5. Use the API client or curl to interact with the API
 
 ## Documentation
 
-For more detailed documentation, see the files in the `shared/docs/` directory:
+For more detailed documentation, see the files in the `docs/` directory:
 
-- [Azure OpenAI Integration](shared/docs/azure_openai_integration.md)
-- [API Wrapper Documentation](shared/docs/api_wrapper_documentation.md)
-- [HITL Workflow](shared/docs/HITL_WORKFLOW.md)
-- [HITL Implementation](shared/docs/HITL_IMPLEMENTATION.md)
+- [Azure OpenAI Integration](docs/azure_openai_integration.md)
+- [API Wrapper Documentation](docs/api_wrapper_documentation.md)
+- [HITL Workflow](docs/HITL_WORKFLOW.md)
+- [HITL Implementation](docs/HITL_IMPLEMENTATION.md)
+
+## LLM Provider Support
+
+The application supports multiple LLM providers:
+
+- **OpenRouter**: Default provider, configured via `OPENAI_API_KEY` and `OPENROUTER_MODEL`
+- **Azure OpenAI**: Configured via `LLM_PROVIDER=azure`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, etc.
+
+See the Azure OpenAI integration documentation for more details.
 
 ## Testing
 

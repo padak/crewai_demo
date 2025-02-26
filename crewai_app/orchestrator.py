@@ -208,15 +208,12 @@ class ContentCreationCrew:
             )
         else:
             # Default to OpenRouter
-            api_key = os.environ.get("OPENROUTER_API_KEY")
+            api_key = os.environ.get("OPENAI_API_KEY")
             base_url = os.environ.get("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
             model = os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o-mini")
             
             if not api_key:
-                raise ValueError("OPENROUTER_API_KEY must be set for OpenRouter")
-            
-            # Set OPENAI_API_KEY environment variable for LiteLLM compatibility
-            os.environ["OPENAI_API_KEY"] = api_key
+                raise ValueError("OPENAI_API_KEY must be set for OpenRouter")
             
             logger.info(f"Using OpenRouter with model: {model}")
             

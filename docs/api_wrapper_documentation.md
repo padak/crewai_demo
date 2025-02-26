@@ -1,107 +1,190 @@
-# CrewAI Content Orchestrator API Wrapper Documentation
+# CrewAI Content Orchestrator API Wrapper
 
-## Overview
-
-The CrewAI Content Orchestrator API Wrapper (`api_wrapper.py`) is a FastAPI-based service that allows you to expose your CrewAI agents and workflows as a RESTful API. This enables you to:
-
-1. Run CrewAI workflows asynchronously
-2. Implement Human-in-the-Loop (HITL) approval processes
-3. Receive webhook notifications for job status updates
-4. Track and manage multiple concurrent jobs
-
-This documentation explains how to integrate your CrewAI code with the API wrapper and how to interact with the exposed endpoints.
+> [!NOTE]
+> This documentation explains how to use the CrewAI Content Orchestrator API Wrapper to expose your CrewAI agents and workflows as a RESTful API.
 
 ## Table of Contents
 
+- [Overview](#overview)
+- [Quick Start](#quick-start)
 - [Integration Guide](#integration-guide)
-  - [Required Code Structure](#required-code-structure)
-  - [CrewBase Integration](#crewbase-integration)
-  - [Direct Function Integration](#direct-function-integration)
+  - [Code Structure Requirements](#code-structure-requirements)
+  - [Environment Configuration](#environment-configuration)
 - [API Endpoints](#api-endpoints)
   - [Health Check](#health-check)
   - [Kickoff Endpoint](#kickoff-endpoint)
   - [Job Status](#job-status)
   - [Feedback Endpoint](#feedback-endpoint)
   - [List Jobs](#list-jobs)
-  - [Delete Job](#delete-job)
   - [List Crews](#list-crews)
+  - [Delete Job](#delete-job)
 - [Webhook Notifications](#webhook-notifications)
-  - [Webhook Payload Structure](#webhook-payload-structure)
   - [Webhook Events](#webhook-events)
 - [Job States](#job-states)
-- [Example Workflows](#example-workflows)
-  - [Direct Mode Workflow](#direct-mode-workflow)
-  - [HITL Workflow](#hitl-workflow)
-- [Error Handling](#error-handling)
-- [Security Considerations](#security-considerations)
+- [Implementation Examples](#implementation-examples)
+  - [Basic Content Generation](#basic-content-generation)
+  - [Human-in-the-Loop Workflow](#human-in-the-loop-workflow)
+- [HITL Workflow Example](#hitl-workflow-example)
 - [Environment Variables](#environment-variables)
+  - [Required Variables](#required-variables)
+  - [LLM Provider Configuration](#llm-provider-configuration)
+- [Troubleshooting](#troubleshooting)
+- [Advanced Configuration](#advanced-configuration)
+  - [API Server Configuration](#api-server-configuration)
+  - [Webhook Configuration](#webhook-configuration)
+  - [Job Storage](#job-storage)
+- [Security Best Practices](#security-best-practices)
+- [Further Resources](#further-resources)
+
+## Overview
+
+The CrewAI Content Orchestrator API Wrapper (`api_wrapper.py`) is a FastAPI service that exposes your CrewAI agents and workflows as a RESTful API. This enables:
+
+- **Asynchronous execution** of CrewAI workflows
+- **Human-in-the-Loop (HITL)** approval processes
+- **Webhook notifications** for job status updates
+- **Job tracking** across multiple concurrent executions
+
+## Quick Start
+
+<details>
+<summary>Click to expand quick start instructions</summary>
+
+1. **Set up your environment**:
+   ```bash
+   # Install dependencies
+   pip install -r requirements.txt
+   
+   # Copy and configure environment variables
+   cp .env.sample .env
+   # Edit .env with your API keys
+   ```
+
+2. **Run the API service**:
+   ```bash
+   bash scripts/run_api.sh
+   # Or directly with uvicorn:
+   # uvicorn api_wrapper.api_wrapper:app --host 0.0.0.0 --port 8888 --timeout-keep-alive 300
+   ```
+
+3. **Make a request**:
+   ```bash
+   curl -X POST http://localhost:8888/kickoff \
+     -H "Content-Type: application/json" \
+     -d '{
+       "crew": "ContentCreationCrew",
+       "inputs": {
+         "topic": "Artificial Intelligence"
+       }
+     }'
+   ```
+</details>
 
 ## Integration Guide
 
-### Required Code Structure
+### Code Structure Requirements
 
-The API wrapper expects your code to follow one of two patterns:
+The API wrapper supports two integration patterns:
 
-1. **CrewBase Classes**: Using the `@CrewBase` decorator from CrewAI's project module
-2. **Direct Functions**: Implementing a specific function called `create_content_with_hitl`
+#### 1. CrewBase Pattern (Recommended)
 
-Your code should be in a Python file specified by the `DATA_APP_ENTRYPOINT` environment variable.
-
-### CrewBase Integration
-
-If you're using CrewAI's `@CrewBase` decorator, your code should look like this:
+<details>
+<summary>Click to see CrewBase pattern example</summary>
 
 ```python
+from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 
 @CrewBase
 class MyContentCrew:
-    """Your crew description"""
+    """Content creation crew for generating articles"""
+    
+    def __init__(self, inputs=None):
+        """Initialize with inputs from API"""
+        self.inputs = inputs or {}
     
     @agent
-    def my_agent(self) -> Agent:
-        """Define your agent"""
-        return Agent(...)
+    def researcher(self) -> Agent:
+        """Define a research agent"""
+        return Agent(
+            role="Research Specialist",
+            goal="Find comprehensive information on the topic",
+            backstory="You are an expert researcher with years of experience",
+            llm=self._get_llm(),
+            verbose=True,
+        )
     
     @task
-    def my_task(self, inputs=None) -> Task:
-        """Define your task"""
-        return Task(...)
+    def research_task(self) -> Task:
+        """Define a research task"""
+        topic = self.inputs.get("topic", "General Knowledge")
+        return Task(
+            description=f"Research the topic: {topic}",
+            expected_output="A detailed research report",
+            agent=self.researcher(),
+            human_input=False,
+        )
     
     @crew
-    def my_crew(self) -> Crew:
-        """Define your crew - this method will be discovered by the API wrapper"""
+    def content_crew(self) -> Crew:
+        """Define your crew - this will be discovered by the API wrapper"""
         return Crew(
-            agents=[self.my_agent()],
-            tasks=[self.my_task()],
-            process=Process.sequential
+            agents=[self.researcher()],
+            tasks=[self.research_task()],
+            process=Process.sequential,
+            verbose=True,
         )
+        
+    def _get_llm(self):
+        """Configure LLM based on environment variables"""
+        # LLM configuration code here
 ```
+</details>
 
-The API wrapper will automatically discover methods decorated with `@crew` and use them to create and run crews.
+The API wrapper automatically discovers methods decorated with `@crew` and makes them available as endpoints.
 
-### Direct Function Integration
+#### 2. Direct Function Pattern
 
-Alternatively, you can implement a function called `create_content_with_hitl` with this signature:
+> [!NOTE]
+> The Direct Function Pattern is currently experimental and may not be fully supported in all versions of the API wrapper. The CrewBase Pattern is the recommended approach.
+
+<details>
+<summary>Click to see Direct Function pattern example (experimental)</summary>
 
 ```python
-def create_content_with_hitl(topic: str, feedback: str = None, require_approval: bool = True) -> Dict[str, Any]:
+def create_content_with_hitl(
+    topic: str, 
+    feedback: str = None, 
+    require_approval: bool = True
+) -> Dict[str, Any]:
     """
     Content creation function with human-in-the-loop capability
+    
     Args:
         topic: The topic to create content about
         feedback: Optional human feedback for refinement
-        require_approval: Whether to require human approval (default: True)
+        require_approval: Whether to require human approval
+        
     Returns:
-        Dictionary with content, execution details, and human approval status
+        Dictionary with content and status information
     """
-    # Your implementation here
-    # Should return a dictionary with at least these keys:
-    # - status: "success", "needs_approval", or "error"
-    # - content: The generated content
-    # - length: Length of the content
-    # - timestamp: When the content was generated
-    # - feedback_incorporated: Whether feedback was used (if applicable)
+    # Implementation here
+    return {
+        "status": "needs_approval",  # or "success" or "error"
+        "content": "Generated content...",
+        "length": 1234,
+        "timestamp": datetime.now().isoformat(),
+    }
+```
+</details>
+
+### Environment Configuration
+
+Set the path to your CrewAI code in the `DATA_APP_ENTRYPOINT` environment variable:
+
+```bash
+# In .env file
+DATA_APP_ENTRYPOINT="crewai_app/orchestrator.py"
 ```
 
 ## API Endpoints
@@ -112,7 +195,13 @@ def create_content_with_hitl(topic: str, feedback: str = None, require_approval:
 
 Returns the health status of the API.
 
-**Response**:
+```bash
+curl http://localhost:8888/health
+```
+
+<details>
+<summary>Click to see response example</summary>
+
 ```json
 {
   "status": "healthy",
@@ -121,6 +210,7 @@ Returns the health status of the API.
   "active_jobs": 2
 }
 ```
+</details>
 
 ### Kickoff Endpoint
 
@@ -128,27 +218,35 @@ Returns the health status of the API.
 
 Starts a new content generation job.
 
-**Request Body**:
-```json
-{
-  "crew": "ContentCreationCrew",
-  "inputs": {
-    "topic": "Artificial Intelligence",
-    "require_approval": false
-  },
-  "webhook_url": "https://your-webhook-endpoint.com/webhook",
-  "wait": false
-}
+<details>
+<summary>Click to see request example</summary>
+
+```bash
+curl -X POST http://localhost:8888/kickoff \
+  -H "Content-Type: application/json" \
+  -d '{
+    "crew": "ContentCreationCrew",
+    "inputs": {
+      "topic": "Artificial Intelligence",
+      "require_approval": true
+    },
+    "webhook_url": "https://your-webhook-endpoint.com/webhook",
+    "wait": false
+  }'
 ```
+</details>
 
 **Parameters**:
 - `crew` (string): The name of the crew class to use
 - `inputs` (object): Input parameters for the crew
-  - `topic` (string): The topic for content generation
-  - `require_approval` (boolean): Whether human approval is required
-  - Other parameters specific to your crew
 - `webhook_url` (string, optional): URL to receive job status updates
-- `wait` (boolean, optional): Whether to wait for job completion (synchronous execution)
+- `wait` (boolean, optional): Whether to wait for job completion (default: false)
+
+> [!WARNING]
+> The `wait=true` parameter is not currently functional. All jobs are processed asynchronously regardless of this setting.
+
+<details>
+<summary>Click to see response examples</summary>
 
 **Response (Asynchronous)**:
 ```json
@@ -159,7 +257,7 @@ Starts a new content generation job.
 }
 ```
 
-**Response (Synchronous)**:
+**Response (Synchronous, with wait=true)**:
 ```json
 {
   "job_id": "987ca65a-62cf-4c48-850b-ad0eb3e37393",
@@ -170,6 +268,7 @@ Starts a new content generation job.
   }
 }
 ```
+</details>
 
 ### Job Status
 
@@ -177,7 +276,13 @@ Starts a new content generation job.
 
 Retrieves the status and result of a specific job.
 
-**Response**:
+```bash
+curl http://localhost:8888/job/987ca65a-62cf-4c48-850b-ad0eb3e37393
+```
+
+<details>
+<summary>Click to see response example</summary>
+
 ```json
 {
   "id": "987ca65a-62cf-4c48-850b-ad0eb3e37393",
@@ -194,6 +299,7 @@ Retrieves the status and result of a specific job.
   }
 }
 ```
+</details>
 
 ### Feedback Endpoint
 
@@ -201,17 +307,25 @@ Retrieves the status and result of a specific job.
 
 Provides human feedback for a job that's pending approval.
 
-**Request Body**:
-```json
-{
-  "feedback": "Please make the content more concise and add more examples.",
-  "approved": false
-}
+<details>
+<summary>Click to see request example</summary>
+
+```bash
+curl -X POST http://localhost:8888/job/987ca65a-62cf-4c48-850b-ad0eb3e37393/feedback \
+  -H "Content-Type: application/json" \
+  -d '{
+    "feedback": "Please make the content more concise and add more examples.",
+    "approved": false
+  }'
 ```
+</details>
 
 **Parameters**:
 - `feedback` (string): Human feedback on the content
 - `approved` (boolean): Whether to approve the content as is
+
+<details>
+<summary>Click to see response examples</summary>
 
 **Response (Approved)**:
 ```json
@@ -228,6 +342,7 @@ Provides human feedback for a job that's pending approval.
   "job_id": "987ca65a-62cf-4c48-850b-ad0eb3e37393"
 }
 ```
+</details>
 
 ### List Jobs
 
@@ -235,11 +350,17 @@ Provides human feedback for a job that's pending approval.
 
 Lists all jobs with optional filtering.
 
+```bash
+curl "http://localhost:8888/jobs?limit=5&status=completed"
+```
+
 **Query Parameters**:
 - `limit` (integer, optional): Maximum number of jobs to return (default: 10)
 - `status` (string, optional): Filter jobs by status
 
-**Response**:
+<details>
+<summary>Click to see response example</summary>
+
 ```json
 {
   "jobs": [
@@ -249,17 +370,37 @@ Lists all jobs with optional filtering.
       "status": "completed",
       "created_at": "2023-06-15T12:34:56.789012",
       "completed_at": "2023-06-15T12:40:56.789012"
-    },
-    {
-      "id": "456ca65a-62cf-4c48-850b-ad0eb3e37789",
-      "crew": "ContentCreationCrew",
-      "status": "running",
-      "created_at": "2023-06-15T13:34:56.789012"
     }
   ],
-  "total": 2
+  "count": 1,
+  "total_jobs": 15
 }
 ```
+</details>
+
+### List Crews
+
+**Endpoint**: `GET /list-crews`
+
+Lists all available crews that can be used with the kickoff endpoint.
+
+```bash
+curl http://localhost:8888/list-crews
+```
+
+<details>
+<summary>Click to see response example</summary>
+
+```json
+{
+  "crews": [
+    "ContentCreationCrew",
+    "content_crew",
+    "content_crew_with_feedback"
+  ]
+}
+```
+</details>
 
 ### Delete Job
 
@@ -267,41 +408,27 @@ Lists all jobs with optional filtering.
 
 Deletes a job and its associated data.
 
-**Response**:
+```bash
+curl -X DELETE http://localhost:8888/job/987ca65a-62cf-4c48-850b-ad0eb3e37393
+```
+
+<details>
+<summary>Click to see response example</summary>
+
 ```json
 {
   "message": "Job deleted successfully",
   "job_id": "987ca65a-62cf-4c48-850b-ad0eb3e37393"
 }
 ```
-
-### List Crews
-
-**Endpoint**: `GET /crews`
-
-Lists all available crews that can be used with the kickoff endpoint.
-
-**Response**:
-```json
-{
-  "crews": [
-    {
-      "name": "ContentCreationCrew",
-      "methods": [
-        "content_crew",
-        "content_crew_with_feedback"
-      ],
-      "description": "Content creation crew for generating articles with optional human feedback"
-    }
-  ]
-}
-```
+</details>
 
 ## Webhook Notifications
 
 The API wrapper can send webhook notifications to a URL you provide when a job's status changes.
 
-### Webhook Payload Structure
+<details>
+<summary>Click to see webhook payload example</summary>
 
 ```json
 {
@@ -315,91 +442,130 @@ The API wrapper can send webhook notifications to a URL you provide when a job's
   }
 }
 ```
+</details>
 
 ### Webhook Events
 
 The following events trigger webhook notifications:
 
 1. **Job Completed**: When a job finishes successfully
-   ```json
-   {
-     "job_id": "987ca65a-62cf-4c48-850b-ad0eb3e37393",
-     "status": "completed",
-     "crew": "ContentCreationCrew",
-     "completed_at": "2023-06-15T12:40:56.789012",
-     "result": {
-       "content": "Generated content...",
-       "length": 1234
-     }
-   }
-   ```
-
 2. **Job Error**: When a job encounters an error
-   ```json
-   {
-     "job_id": "987ca65a-62cf-4c48-850b-ad0eb3e37393",
-     "status": "error",
-     "crew": "ContentCreationCrew",
-     "error_at": "2023-06-15T12:38:56.789012",
-     "error": "Error message",
-     "error_type": "ValueError"
-   }
-   ```
-
 3. **Pending Approval**: When a job is waiting for human approval
-   ```json
-   {
-     "job_id": "987ca65a-62cf-4c48-850b-ad0eb3e37393",
-     "status": "pending_approval",
-     "crew": "ContentCreationCrew",
-     "result": {
-       "content": "Generated content...",
-       "length": 1234
-     }
-   }
-   ```
-
-> **Note**: For testing webhook functionality locally, a simple webhook receiver (`webhook_receiver.py`) is included in the project. This is intended for development purposes only and should not be used in production.
 
 ## Job States
 
 A job can be in one of the following states:
 
-1. **queued**: Job has been created and is waiting to be processed
-2. **processing**: Job is currently being processed
-3. **pending_approval**: Job is waiting for human approval
-4. **completed**: Job has completed successfully
-5. **error**: Job encountered an error
+- **queued**: Job has been created and is waiting to be processed
+- **processing**: Job is currently being processed
+- **pending_approval**: Job is waiting for human approval
+- **completed**: Job has completed successfully
+- **error**: Job encountered an error
 
-## Example Workflows
+## Implementation Examples
 
-### Direct Mode Workflow
+### Basic Content Generation
 
-1. Start a job without requiring approval:
+<details>
+<summary>Click to see basic content generation example</summary>
+
+```python
+# In orchestrator.py
+@CrewBase
+class ContentCreationCrew:
+    """Content creation crew for generating articles"""
+    
+    def __init__(self, inputs=None):
+        self.inputs = inputs or {}
+    
+    @agent
+    def writer_agent(self) -> Agent:
+        return Agent(
+            role="Content Writer",
+            goal="Create engaging content",
+            backstory="You are a skilled writer",
+            llm=self._get_llm(),
+            verbose=True,
+        )
+    
+    @task
+    def writing_task(self) -> Task:
+        topic = self.inputs.get("topic", "General Knowledge")
+        return Task(
+            description=f"Write about {topic}",
+            expected_output="A well-structured article",
+            agent=self.writer_agent(),
+            human_input=False,
+        )
+    
+    @crew
+    def content_crew(self) -> Crew:
+        return Crew(
+            agents=[self.writer_agent()],
+            tasks=[self.writing_task()],
+            process=Process.sequential,
+            verbose=True,
+        )
+    
+    def _get_llm(self):
+        # Use OPENAI_API_KEY for OpenRouter
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY must be set")
+        
+        return ChatOpenAI(
+            model="openai/gpt-4o-mini",
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1",
+            temperature=0.7,
+        )
+```
+</details>
+
+### Human-in-the-Loop Workflow
+
+<details>
+<summary>Click to see HITL workflow implementation example</summary>
+
+```python
+# In orchestrator.py
+@CrewBase
+class ContentCreationCrew:
+    # ... other methods ...
+    
+    @task
+    def editing_with_feedback_task(self) -> Task:
+        feedback = self.inputs.get("feedback", "Please improve the content.")
+        return Task(
+            description=f"Edit the content incorporating this feedback: {feedback}",
+            expected_output="A polished article addressing the feedback",
+            agent=self.editor_agent(),
+            context=[self.writing_task()],
+            human_input=False,
+        )
+    
+    @crew
+    def content_crew_with_feedback(self) -> Crew:
+        return Crew(
+            agents=[self.writer_agent(), self.editor_agent()],
+            tasks=[self.writing_task(), self.editing_with_feedback_task()],
+            process=Process.sequential,
+            verbose=True,
+        )
+```
+</details>
+
+## HITL Workflow Example
+
+> [!TIP]
+> Human-in-the-Loop (HITL) workflows allow for human feedback and approval during the content generation process.
+
+<details>
+<summary>Click to see complete HITL workflow example</summary>
+
+1. **Start a job requiring approval**:
    ```bash
-   curl -X POST https://your-api-url/kickoff \
-     -H "Content-Type: application/json" \
-     -d '{
-       "crew": "ContentCreationCrew",
-       "inputs": {
-         "topic": "Artificial Intelligence",
-         "require_approval": false
-       }
-     }'
-   ```
-
-2. Get the job ID from the response and check status:
-   ```bash
-   curl https://your-api-url/job/YOUR_JOB_ID
-   ```
-
-3. Once status is "completed", retrieve the content from the result.
-
-### HITL Workflow
-
-1. Start a job requiring approval:
-   ```bash
-   curl -X POST https://your-api-url/kickoff \
+   curl -X POST http://localhost:8888/kickoff \
      -H "Content-Type: application/json" \
      -d '{
        "crew": "ContentCreationCrew",
@@ -410,26 +576,23 @@ A job can be in one of the following states:
      }'
    ```
 
-2. Get the job ID from the response and check status:
+2. **Check job status until it's pending approval**:
    ```bash
-   curl https://your-api-url/job/YOUR_JOB_ID
+   curl http://localhost:8888/job/YOUR_JOB_ID
    ```
 
-3. Once status is "pending_approval", review the content and either:
-
-   a. Approve the content:
+3. **Provide feedback or approve**:
    ```bash
-   curl -X POST https://your-api-url/job/YOUR_JOB_ID/feedback \
+   # To approve:
+   curl -X POST http://localhost:8888/job/YOUR_JOB_ID/feedback \
      -H "Content-Type: application/json" \
      -d '{
        "feedback": "Content approved as is.",
        "approved": true
      }'
-   ```
-
-   b. Provide feedback for improvement:
-   ```bash
-   curl -X POST https://your-api-url/job/YOUR_JOB_ID/feedback \
+   
+   # To request changes:
+   curl -X POST http://localhost:8888/job/YOUR_JOB_ID/feedback \
      -H "Content-Type: application/json" \
      -d '{
        "feedback": "Please add more examples about renewable energy.",
@@ -437,52 +600,13 @@ A job can be in one of the following states:
      }'
    ```
 
-4. If feedback was provided, check status again until it's "pending_approval" again, then review the updated content.
-
-5. Once approved, the status will change to "completed".
-
-## Error Handling
-
-The API wrapper provides detailed error information when something goes wrong:
-
-```json
-{
-  "id": "987ca65a-62cf-4c48-850b-ad0eb3e37393",
-  "crew": "ContentCreationCrew",
-  "inputs": {
-    "topic": "Artificial Intelligence"
-  },
-  "status": "error",
-  "created_at": "2023-06-15T12:34:56.789012",
-  "error_at": "2023-06-15T12:38:56.789012",
-  "error": "Error message",
-  "error_type": "ValueError"
-}
-```
-
-Common error scenarios:
-- Crew not found
-- Invalid inputs
-- Execution errors in your code
-- Timeout errors
-
-## Security Considerations
-
-The API wrapper includes several security features:
-
-1. **CORS Middleware**: Controls which domains can access the API
-2. **Trusted Host Middleware**: Restricts which hosts can make requests
-3. **Environment Variables**: Sensitive information is loaded from environment variables or a secrets file
-
-When deploying to production, consider:
-- Using HTTPS
-- Implementing authentication
-- Restricting webhook URLs to trusted domains
-- Setting appropriate timeouts for long-running operations
+4. **If feedback was provided, check status again** until it's "pending_approval" again, then review the updated content.
+</details>
 
 ## Environment Variables
 
-The API wrapper uses the following environment variables:
+> [!IMPORTANT]
+> Make sure to set all required environment variables before running the API wrapper.
 
 ### Required Variables
 
@@ -490,72 +614,132 @@ The API wrapper uses the following environment variables:
 
 ### LLM Provider Configuration
 
-The system supports two LLM providers: OpenRouter and Azure OpenAI. You can configure them using the following variables:
-
-#### OpenRouter Configuration (Default)
+<details>
+<summary>OpenRouter Configuration (Default)</summary>
 
 - `LLM_PROVIDER=openrouter`: Set to use OpenRouter
-- `OPENROUTER_API_KEY`: Your OpenRouter API key
-- `OPENAI_API_BASE=https://openrouter.ai/api/v1`: The OpenRouter API base URL (optional)
-- `OPENROUTER_MODEL=openai/gpt-4o-mini`: The model to use (optional)
+- `OPENAI_API_KEY`: Your API key for OpenRouter
+- `OPENAI_API_BASE=https://openrouter.ai/api/v1`: The OpenRouter API base URL
+- `OPENROUTER_MODEL=openai/gpt-4o-mini`: The model to use
+</details>
 
-#### Azure OpenAI Configuration
+<details>
+<summary>Azure OpenAI Configuration</summary>
 
 - `LLM_PROVIDER=azure`: Set to use Azure OpenAI
 - `AZURE_OPENAI_API_KEY`: Your Azure OpenAI API key
 - `AZURE_OPENAI_ENDPOINT`: Your Azure OpenAI endpoint URL
-- `AZURE_OPENAI_API_VERSION=2023-05-15`: The API version (optional)
-- `AZURE_OPENAI_DEPLOYMENT_ID=gpt-35-turbo-0125`: The deployment ID (optional)
-
-### API Key Compatibility
-
-The system now automatically sets the `OPENAI_API_KEY` environment variable to the value of `OPENROUTER_API_KEY` when using OpenRouter. This ensures compatibility with libraries like LiteLLM that expect the standard OpenAI API key to be set.
-
-### API Configuration
-
-- `API_HOST=0.0.0.0`: Host to bind the API server (optional)
-- `API_PORT=8888`: Port to bind the API server (optional)
-- `API_WORKERS=1`: Number of worker processes (optional)
-- `API_LOG_LEVEL=info`: Log level for the API server (optional)
-
-### Job Storage
-
-- `JOB_STORAGE_TYPE=memory`: Storage type for jobs (memory or redis) (optional)
-- `REDIS_URL=redis://localhost:6379/0`: Redis URL for job storage (required if using redis storage)
-
-### Webhook Configuration
-
-- `WEBHOOK_RETRY_ATTEMPTS=3`: Number of retry attempts for webhook delivery (optional)
-- `WEBHOOK_RETRY_DELAY=5`: Delay between retry attempts in seconds (optional)
+- `AZURE_OPENAI_API_VERSION=2023-05-15`: The API version
+- `AZURE_OPENAI_DEPLOYMENT_ID=gpt-35-turbo-0125`: The deployment ID
+</details>
 
 ## Troubleshooting
 
-### Common Issues
+> [!WARNING]
+> Common issues you might encounter when using the API wrapper and how to solve them.
 
-#### API Key Issues
+<details>
+<summary>Module Loading Issues</summary>
 
-If you encounter authentication errors, check that:
+**Problem**: API fails to load your module
+```
+Error: Failed to load user script: No module named 'crewai_app'
+```
 
-1. You have set the correct API key for your chosen provider:
-   - For OpenRouter: `OPENROUTER_API_KEY`
-   - For Azure OpenAI: `AZURE_OPENAI_API_KEY`
+**Solutions**:
+- Verify `DATA_APP_ENTRYPOINT` is set correctly in your `.env` file
+- Ensure the Python path includes your project root
+- Check that the file exists and has the correct permissions
+</details>
 
-2. The system now automatically sets `OPENAI_API_KEY` to the value of `OPENROUTER_API_KEY` when using OpenRouter for compatibility with libraries like LiteLLM.
+<details>
+<summary>Crew Discovery Issues</summary>
 
-#### Module Loading Issues
+**Problem**: API can't find your crew
+```
+Error: Crew ContentCreationCrew not found in user module
+```
 
-If the API fails to load your module, check:
+**Solutions**:
+- Ensure your class is decorated with `@CrewBase`
+- Check that at least one method is decorated with `@crew`
+- Verify the class name matches what you're passing to the API
+</details>
 
-1. The `DATA_APP_ENTRYPOINT` environment variable is set correctly
-2. The file exists and is accessible
-3. The file contains either a `@CrewBase` class or a `create_content_with_hitl` function
+<details>
+<summary>API Key Issues</summary>
 
-#### Job Execution Issues
+**Problem**: Authentication errors with LLM providers
+```
+Error: OPENAI_API_KEY must be set for OpenRouter
+```
 
-If jobs fail to execute:
+**Solutions**:
+- Set `OPENAI_API_KEY` in your `.env` file
+- For Azure, ensure `AZURE_OPENAI_API_KEY` and `AZURE_OPENAI_ENDPOINT` are set
+- Verify the API keys are valid and have not expired
+</details>
 
-1. Check the logs for error messages
-2. Verify that your crew code works correctly when run directly
-3. Ensure that all required environment variables are set
+<details>
+<summary>Job Execution Issues</summary>
 
-For more detailed troubleshooting, refer to the [Azure OpenAI Integration](azure_openai_integration.md) documentation. 
+**Problem**: Jobs fail to execute or get stuck
+```
+Error: 'NoneType' object has no attribute 'kickoff'
+```
+
+**Solutions**:
+- Check that your crew method returns a valid Crew object
+- Ensure all required inputs are provided
+- Look for exceptions in your agent or task code
+- Verify LLM configuration is correct
+</details>
+
+## Advanced Configuration
+
+### API Server Configuration
+
+```bash
+# In .env file
+API_HOST=0.0.0.0
+API_PORT=8888
+API_WORKERS=1
+API_LOG_LEVEL=info
+```
+
+### Webhook Configuration
+
+```bash
+# In .env file
+WEBHOOK_RETRY_ATTEMPTS=3
+WEBHOOK_RETRY_DELAY=5
+```
+
+### Job Storage
+
+```bash
+# In .env file
+JOB_STORAGE_TYPE=memory  # or 'redis'
+REDIS_URL=redis://localhost:6379/0  # if using redis
+```
+
+## Security Best Practices
+
+> [!CAUTION]
+> Implementing proper security measures is crucial when deploying to production environments.
+
+When deploying to production:
+
+1. **Use HTTPS** with a valid SSL certificate
+2. **Implement authentication** using API keys or OAuth
+3. **Restrict CORS** to trusted domains only
+4. **Validate webhook URLs** against a whitelist
+5. **Set appropriate timeouts** for long-running operations
+6. **Monitor and rate limit** requests to prevent abuse
+
+## Further Resources
+
+- [CrewAI Documentation](https://docs.crewai.com/)
+- [Azure OpenAI Integration](azure_openai_integration.md)
+- [HITL Workflow](HITL_WORKFLOW.md)
+- [HITL Implementation](HITL_IMPLEMENTATION.md) 
