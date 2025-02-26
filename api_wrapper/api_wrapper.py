@@ -772,6 +772,7 @@ async def list_crews():
     """List available crews in the user module"""
     try:
         crews = []
+        # First, find top-level functions that return Dict
         for name, obj in vars(user_module).items():
             if callable(obj) and not name.startswith("_"):
                 if hasattr(obj, "__annotations__") and "return" in obj.__annotations__:
@@ -783,14 +784,57 @@ async def list_crews():
                     ):
                         crews.append(name)
 
-        # Also look for classes with @CrewBase decorator
-        for name, obj in vars(user_module).items():
+        # Look for classes with CrewBase functionality
+        for class_name, class_obj in vars(user_module).items():
             if (
-                isinstance(obj, type)
-                and hasattr(obj, "__module__")
-                and obj.__module__ == user_module.__name__
+                isinstance(class_obj, type)
+                and hasattr(class_obj, "__module__")
+                and class_obj.__module__ == user_module.__name__
             ):
-                crews.append(name)
+                # Check if this is a CrewBase class by looking for the is_crew_class attribute
+                # or by checking if the class name contains "CrewBase"
+                is_crew_base = False
+                
+                # Check if it's a wrapped CrewBase class
+                if hasattr(class_obj, "is_crew_class") and getattr(class_obj, "is_crew_class", False):
+                    is_crew_base = True
+                # Or check if it's named like a CrewBase class
+                elif "CrewBase" in class_obj.__name__:
+                    is_crew_base = True
+                
+                if is_crew_base:
+                    # Try to create an instance to inspect its methods
+                    try:
+                        instance = class_obj()
+                        
+                        # Look for methods that return a Crew object
+                        for method_name in dir(instance):
+                            if not method_name.startswith("_") and callable(getattr(instance, method_name)):
+                                method = getattr(instance, method_name)
+                                
+                                # Check if this method returns a Crew based on annotations
+                                is_crew_method = False
+                                
+                                # Check if it has the return type annotation for Crew
+                                if (
+                                    hasattr(method, "__annotations__") 
+                                    and "return" in method.__annotations__
+                                    and method.__annotations__["return"] is not None
+                                    and hasattr(method.__annotations__["return"], "__name__")
+                                    and method.__annotations__["return"].__name__ == "Crew"
+                                ):
+                                    is_crew_method = True
+                                
+                                # Or check if it's wrapped by the @crew decorator
+                                elif hasattr(method, "__closure__") and method.__closure__ is not None:
+                                    # The @crew decorator wraps the original function
+                                    is_crew_method = True
+                                
+                                if is_crew_method and method_name not in crews:
+                                    crews.append(method_name)
+                                    logger.info(f"Found crew method: {method_name}")
+                    except Exception as e:
+                        logger.warning(f"Could not inspect methods of {class_name}: {str(e)}")
 
         return {"crews": crews}
     except Exception as e:

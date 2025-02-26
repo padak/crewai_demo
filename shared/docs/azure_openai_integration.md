@@ -12,7 +12,7 @@ To use Azure OpenAI, you need to set the following environment variables:
 
 1. `LLM_PROVIDER=azure` - This tells the system to use Azure OpenAI instead of OpenRouter
 2. `AZURE_OPENAI_API_KEY` - Your Azure OpenAI API key
-3. `AZURE_OPENAI_ENDPOINT` - Your Azure OpenAI endpoint URL (e.g., "<https://your-resource-name.openai.azure.com/>")
+3. `AZURE_OPENAI_ENDPOINT` - Your Azure OpenAI endpoint URL (e.g., "https://your-resource-name.openai.azure.com/")
 4. `AZURE_OPENAI_API_VERSION` - (Optional) The API version to use (defaults to "2023-05-15")
 5. `AZURE_OPENAI_DEPLOYMENT_ID` - (Optional) The deployment ID to use (defaults to "gpt-35-turbo-0125")
 
@@ -73,7 +73,6 @@ if llm_provider == "azure":
 Azure OpenAI uses deployment IDs instead of model names. The default deployment ID is `gpt-35-turbo-0125`, but you can specify a different one by setting the `AZURE_OPENAI_DEPLOYMENT_ID` environment variable.
 
 Supported deployment IDs include:
-
 - `gpt-35-turbo-0125` - GPT-3.5 Turbo
 - `gpt-4-32k` - GPT-4 with 32k context window
 
@@ -85,13 +84,13 @@ You can test the Azure OpenAI integration using the provided test scripts:
 
 ```bash
 # Test Azure OpenAI directly
-python test_azure_openai.py
+python crewai_app/tests/test_azure_openai.py
 
 # Test OpenRouter directly
-python test_openrouter.py
+python crewai_app/tests/test_openrouter.py
 
 # Test the integration with CrewAI
-python test_crewai_integration.py
+python crewai_app/tests/test_crewai_integration.py
 ```
 
 ## Switching Between Providers
@@ -115,7 +114,6 @@ OPENROUTER_MODEL=openai/gpt-4o-mini  # Optional, this is the default
 ```
 
 Note that OpenRouter model IDs follow the format `provider/model-name`, such as:
-
 - `openai/gpt-4o-mini`
 - `openai/gpt-4`
 - `anthropic/claude-3.5-sonnet`
@@ -144,4 +142,4 @@ If you encounter an error like `Completions.create() got an unexpected keyword a
 
 If you see an error like `'openrouter/openai/gpt-4o-mini is not a valid model ID'`, make sure you're using the correct model ID format. OpenRouter model IDs should be in the format `provider/model-name` (e.g., `openai/gpt-4o-mini`), not `openrouter/provider/model-name`.
 
-For more information about Azure OpenAI, refer to the [official documentation](https://learn.microsoft.com/en-us/fabric/data-science/ai-services/how-to-use-openai-sdk-synapse?tabs=python0).
+For more information about Azure OpenAI, refer to the [official documentation](https://learn.microsoft.com/en-us/fabric/data-science/ai-services/how-to-use-openai-sdk-synapse?tabs=python0). 

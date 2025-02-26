@@ -248,13 +248,16 @@ Lists all jobs with optional filtering.
       "crew": "ContentCreationCrew",
       "status": "completed",
       "created_at": "2023-06-15T12:34:56.789012",
-      "completed_at": "2023-06-15T12:40:56.789012",
-      "has_result": true,
-      "has_error": false
+      "completed_at": "2023-06-15T12:40:56.789012"
+    },
+    {
+      "id": "456ca65a-62cf-4c48-850b-ad0eb3e37789",
+      "crew": "ContentCreationCrew",
+      "status": "running",
+      "created_at": "2023-06-15T13:34:56.789012"
     }
   ],
-  "count": 1,
-  "total_jobs": 5
+  "total": 2
 }
 ```
 
@@ -262,25 +265,35 @@ Lists all jobs with optional filtering.
 
 **Endpoint**: `DELETE /job/{job_id}`
 
-Deletes a specific job.
+Deletes a job and its associated data.
 
 **Response**:
 ```json
 {
-  "message": "Job 987ca65a-62cf-4c48-850b-ad0eb3e37393 deleted successfully"
+  "message": "Job deleted successfully",
+  "job_id": "987ca65a-62cf-4c48-850b-ad0eb3e37393"
 }
 ```
 
 ### List Crews
 
-**Endpoint**: `GET /list-crews`
+**Endpoint**: `GET /crews`
 
-Lists all available crews in the system.
+Lists all available crews that can be used with the kickoff endpoint.
 
 **Response**:
 ```json
 {
-  "crews": ["ContentCreationCrew", "ResearchCrew"]
+  "crews": [
+    {
+      "name": "ContentCreationCrew",
+      "methods": [
+        "content_crew",
+        "content_crew_with_feedback"
+      ],
+      "description": "Content creation crew for generating articles with optional human feedback"
+    }
+  ]
 }
 ```
 
@@ -471,8 +484,78 @@ When deploying to production, consider:
 
 The API wrapper uses the following environment variables:
 
-- `DATA_APP_ENTRYPOINT`: Path to your Python script containing CrewAI code (required)
-- `OPENROUTER_API_KEY`: API key for OpenRouter (if using OpenRouter for LLM access)
-- Other environment variables specific to your CrewAI implementation
+### Required Variables
 
-You can set these variables in a `.streamlit/secrets.toml` file, which will be loaded automatically by the API wrapper. 
+- `DATA_APP_ENTRYPOINT`: Path to your CrewAI code file (e.g., `crewai_app/orchestrator.py`)
+
+### LLM Provider Configuration
+
+The system supports two LLM providers: OpenRouter and Azure OpenAI. You can configure them using the following variables:
+
+#### OpenRouter Configuration (Default)
+
+- `LLM_PROVIDER=openrouter`: Set to use OpenRouter
+- `OPENROUTER_API_KEY`: Your OpenRouter API key
+- `OPENAI_API_BASE=https://openrouter.ai/api/v1`: The OpenRouter API base URL (optional)
+- `OPENROUTER_MODEL=openai/gpt-4o-mini`: The model to use (optional)
+
+#### Azure OpenAI Configuration
+
+- `LLM_PROVIDER=azure`: Set to use Azure OpenAI
+- `AZURE_OPENAI_API_KEY`: Your Azure OpenAI API key
+- `AZURE_OPENAI_ENDPOINT`: Your Azure OpenAI endpoint URL
+- `AZURE_OPENAI_API_VERSION=2023-05-15`: The API version (optional)
+- `AZURE_OPENAI_DEPLOYMENT_ID=gpt-35-turbo-0125`: The deployment ID (optional)
+
+### API Key Compatibility
+
+The system now automatically sets the `OPENAI_API_KEY` environment variable to the value of `OPENROUTER_API_KEY` when using OpenRouter. This ensures compatibility with libraries like LiteLLM that expect the standard OpenAI API key to be set.
+
+### API Configuration
+
+- `API_HOST=0.0.0.0`: Host to bind the API server (optional)
+- `API_PORT=8888`: Port to bind the API server (optional)
+- `API_WORKERS=1`: Number of worker processes (optional)
+- `API_LOG_LEVEL=info`: Log level for the API server (optional)
+
+### Job Storage
+
+- `JOB_STORAGE_TYPE=memory`: Storage type for jobs (memory or redis) (optional)
+- `REDIS_URL=redis://localhost:6379/0`: Redis URL for job storage (required if using redis storage)
+
+### Webhook Configuration
+
+- `WEBHOOK_RETRY_ATTEMPTS=3`: Number of retry attempts for webhook delivery (optional)
+- `WEBHOOK_RETRY_DELAY=5`: Delay between retry attempts in seconds (optional)
+
+## Troubleshooting
+
+### Common Issues
+
+#### API Key Issues
+
+If you encounter authentication errors, check that:
+
+1. You have set the correct API key for your chosen provider:
+   - For OpenRouter: `OPENROUTER_API_KEY`
+   - For Azure OpenAI: `AZURE_OPENAI_API_KEY`
+
+2. The system now automatically sets `OPENAI_API_KEY` to the value of `OPENROUTER_API_KEY` when using OpenRouter for compatibility with libraries like LiteLLM.
+
+#### Module Loading Issues
+
+If the API fails to load your module, check:
+
+1. The `DATA_APP_ENTRYPOINT` environment variable is set correctly
+2. The file exists and is accessible
+3. The file contains either a `@CrewBase` class or a `create_content_with_hitl` function
+
+#### Job Execution Issues
+
+If jobs fail to execute:
+
+1. Check the logs for error messages
+2. Verify that your crew code works correctly when run directly
+3. Ensure that all required environment variables are set
+
+For more detailed troubleshooting, refer to the [Azure OpenAI Integration](azure_openai_integration.md) documentation. 

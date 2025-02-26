@@ -1,0 +1,7 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+- Use uv for package and venv management: https://docs.astral.sh/uv/
+- Always source the venv before running any Python commands
